@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 import socket
 import unittest
 import urllib.error
@@ -210,6 +211,15 @@ class FlaskSliceTests(unittest.TestCase):
         })
         self.client = self.app.test_client()
 
+    def _wait_for_job(self, job_id):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            status = self.client.get(f"/status/{job_id}").json["status"]
+            if status in {"done", "error"}:
+                return status
+            time.sleep(0.01)
+        self.fail(f"job {job_id} did not finish")
+
     def test_home_and_health(self):
         home = self.client.get("/")
         health = self.client.get("/health")
@@ -229,6 +239,8 @@ class FlaskSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 303)
+        job_id = response.headers["Location"].rsplit("/", 1)[-1]
+        self.assertEqual(self._wait_for_job(job_id), "done")
         result = self.client.get(response.headers["Location"])
         self.assertEqual(result.status_code, 200)
         self.assertIn(b'sandbox="allow-popups allow-popups-to-escape-sandbox"', result.data)
@@ -251,8 +263,11 @@ class FlaskSliceTests(unittest.TestCase):
             data={"url": "https://example.com/", "intensity": "medium"},
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn(b"private destination blocked", response.data)
+        self.assertEqual(response.status_code, 303)
+        job_id = response.headers["Location"].rsplit("/", 1)[-1]
+        self.assertEqual(self._wait_for_job(job_id), "error")
+        result = self.client.get(response.headers["Location"])
+        self.assertIn(b"private destination blocked", result.data)
 
     def test_unknown_render_job_is_not_found(self):
         self.assertEqual(self.client.get("/render/missing").status_code, 404)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 import unittest
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -32,14 +33,11 @@ def _upload_data(
     assets: dict[str, bytes] | None = None,
 ):
     assets = UPLOAD_FILES if assets is None else assets
-    data = {
-        "html_file": (io.BytesIO(html), html_name),
-        "intensity": "medium",
-    }
+    data = {"intensity": "medium"}
+    files = [(io.BytesIO(html), html_name)]
     if assets:
-        data["assets"] = [
-            (io.BytesIO(content), name) for name, content in assets.items()
-        ]
+        files.extend((io.BytesIO(content), name) for name, content in assets.items())
+    data["uploads"] = files
     return data
 
 
@@ -230,12 +228,26 @@ class UploadRouteTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
 
-    def test_homepage_offers_zip_upload(self):
+    def _wait_for_job(self, response):
+        job_id = response.headers["Location"].rsplit("/", 1)[-1]
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            status = self.client.get(f"/status/{job_id}").json["status"]
+            if status in {"done", "error"}:
+                return self.app.config["JOBS"][job_id]
+            time.sleep(0.01)
+        self.fail(f"job {job_id} did not finish")
+
+    def test_homepage_has_one_upload_field_for_all_supported_file_forms(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'name="zip_file"', response.data)
-        self.assertIn(b"one HTML file and its CSS/images", response.data)
+        self.assertIn(b'name="uploads"', response.data)
+        self.assertIn(b'multiple', response.data)
+        self.assertIn(b".html,.htm,.css,.png,.jpg,.jpeg,.gif,.webp,.zip", response.data)
+        self.assertNotIn(b'name="html_file"', response.data)
+        self.assertNotIn(b'name="assets"', response.data)
+        self.assertNotIn(b'name="zip_file"', response.data)
 
     @patch("app.pipeline.fake.complete")
     def test_upload_decorates_and_repeated_upload_hits_cache(self, complete):
@@ -244,9 +256,9 @@ class UploadRouteTests(unittest.TestCase):
         )
 
         first = self._post_upload()
-        first_job = next(iter(self.app.config["JOBS"].values()))
+        first_job = self._wait_for_job(first)
         second = self._post_upload()
-        second_job = list(self.app.config["JOBS"].values())[-1]
+        second_job = self._wait_for_job(second)
 
         self.assertEqual(first.status_code, 303)
         self.assertEqual(second.status_code, 303)
@@ -267,6 +279,7 @@ class UploadRouteTests(unittest.TestCase):
             html=b'<html><head><link rel="stylesheet" href="missing.css"></head><body><h1>Page</h1></body></html>',
             assets={},
         )
+        self._wait_for_job(response)
 
         result_page = self.client.get(response.headers["Location"])
 
@@ -296,21 +309,21 @@ class UploadRouteTests(unittest.TestCase):
         first = self.client.post(
             "/decorate",
             data={
-                "zip_file": (io.BytesIO(archive_bytes), "site.zip"),
+                "uploads": (io.BytesIO(archive_bytes), "site.zip"),
                 "intensity": "medium",
             },
             content_type="multipart/form-data",
         )
-        first_job = next(iter(self.app.config["JOBS"].values()))
+        first_job = self._wait_for_job(first)
         second = self.client.post(
             "/decorate",
             data={
-                "zip_file": (io.BytesIO(archive_bytes), "site.zip"),
+                "uploads": (io.BytesIO(archive_bytes), "site.zip"),
                 "intensity": "medium",
             },
             content_type="multipart/form-data",
         )
-        second_job = list(self.app.config["JOBS"].values())[-1]
+        second_job = self._wait_for_job(second)
 
         self.assertEqual(first.status_code, 303)
         self.assertEqual(second.status_code, 303)
@@ -325,7 +338,7 @@ class UploadRouteTests(unittest.TestCase):
         invalid_archive = self.client.post(
             "/decorate",
             data={
-                "zip_file": (io.BytesIO(b"not zip"), "site.zip"),
+                "uploads": (io.BytesIO(b"not zip"), "site.zip"),
                 "intensity": "medium",
             },
             content_type="multipart/form-data",
@@ -333,8 +346,10 @@ class UploadRouteTests(unittest.TestCase):
         mixed_inputs = self.client.post(
             "/decorate",
             data={
-                "zip_file": (io.BytesIO(_zip_bytes({"index.html": UPLOAD_HTML})), "site.zip"),
-                "html_file": (io.BytesIO(UPLOAD_HTML), "index.html"),
+                "uploads": [
+                    (io.BytesIO(_zip_bytes({"index.html": UPLOAD_HTML})), "site.zip"),
+                    (io.BytesIO(UPLOAD_HTML), "index.html"),
+                ],
                 "intensity": "medium",
             },
             content_type="multipart/form-data",
@@ -344,6 +359,25 @@ class UploadRouteTests(unittest.TestCase):
         self.assertIn(b"invalid or damaged", invalid_archive.data)
         self.assertEqual(mixed_inputs.status_code, 400)
         self.assertIn(b"either one ZIP file", mixed_inputs.data)
+
+    @patch("app.pipeline.fake.complete")
+    def test_regenerate_uses_new_variant_and_original_snapshot_is_available(self, complete):
+        complete.return_value = "PLACE: bat @ top-right"
+        initial = self._post_upload()
+        first = self._wait_for_job(initial)
+        first_id = initial.headers["Location"].rsplit("/", 1)[-1]
+
+        original_page = self.client.get(f"/render/{first_id}?view=original")
+        regenerated = self.client.post(f"/regenerate/{first_id}")
+        second = self._wait_for_job(regenerated)
+
+        self.assertEqual(original_page.status_code, 200)
+        self.assertNotIn("hw-root", original_page.get_data(as_text=True))
+        self.assertEqual(regenerated.status_code, 303)
+        self.assertEqual(second["variant"], first["variant"] + 1)
+        self.assertEqual(second["source_id"], first["source_id"])
+        self.assertFalse(second["cache_hit"])
+        self.assertEqual(complete.call_count, 2)
 
     @patch("app.load_page")
     def test_existing_url_flow_still_works(self, load):

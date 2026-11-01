@@ -116,6 +116,7 @@ def assemble_page(
     intensity: str,
     placements: tuple[tuple[str, str], ...],
     accent: str | None = None,
+    model_css: str = "",
 ) -> str:
     soup = BeautifulSoup(source_html, "html.parser")
     for element in list(soup.contents):
@@ -136,7 +137,12 @@ def assemble_page(
         h2_count=len(soup.body.find_all("h2")),
     )
     style = soup.new_tag("style", attrs={"data-hw-added": "theme"})
-    style.string = _theme_css(theme_id, intensity, accent=accent) + "\n" + decoration_css(intensity)
+    style.string = (
+        _theme_css(theme_id, intensity, accent=accent)
+        + "\n"
+        + decoration_css(intensity)
+        + ("\n" + model_css if model_css else "")
+    )
     soup.head.append(style)
     _font_stylesheet(soup, theme_id)
 

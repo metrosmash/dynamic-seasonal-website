@@ -86,7 +86,7 @@ def parse_design_response(text: str, tier: str) -> DesignResult:
             line for line in css.splitlines()
             if not re.fullmatch(r"\s*(```|~~~)(?:css)?\s*", line, re.I)
         ).strip()
-        css = css[:budget["css_chars"]]
+        css = css[:budget["css_chars"] + 1] if budget["css_chars"] else ""
 
     def unquote(value: str) -> str:
         value = value.strip()

@@ -38,4 +38,11 @@ def load_config(root: Path) -> dict[str, object]:
         "MAX_UPLOAD_ARCHIVE_BYTES": _positive_int("MAX_UPLOAD_ARCHIVE_BYTES", 8 * 1024 * 1024),
         "UPLOAD_CACHE_MAX_BYTES": _positive_int("UPLOAD_CACHE_MAX_BYTES", 16 * 1024 * 1024),
         "MAX_UPLOAD_FILES": _positive_int("MAX_UPLOAD_FILES", 32),
+        "JOB_WORKERS": _positive_int("JOB_WORKERS", 2),
+        "MAX_PENDING_JOBS": _positive_int("MAX_PENDING_JOBS", 8),
+        "JOB_DEADLINE_S": _positive_int("JOB_DEADLINE_S", 60),
+        "RATE_LIMIT_BURST": _positive_int("RATE_LIMIT_BURST", 10),
+        "RATE_LIMIT_WINDOW_S": _positive_int("RATE_LIMIT_WINDOW_S", 60),
+        "DAILY_REQUEST_LIMIT": _positive_int("DAILY_REQUEST_LIMIT", 5000),
+        "MAX_STORED_JOBS": _positive_int("MAX_STORED_JOBS", 500),
     }

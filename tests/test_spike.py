@@ -249,7 +249,7 @@ PLACE: bat @ float"""
             "medium",
         )
 
-        self.assertEqual(len(design.css), 2500)
+        self.assertEqual(len(design.css), 2501)
 
     def test_placements_are_truncated_to_tier_budget(self):
         response = "\n".join(

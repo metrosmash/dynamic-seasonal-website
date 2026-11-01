@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
+import time
+import threading
 from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import quote
@@ -10,13 +14,29 @@ from flask import Flask, abort, jsonify, redirect, render_template, request, url
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.config import load_config
+from app.job_pool import BoundedJobPool
 from app.pipeline import decorate_page
+from app.rate_limit import RequestLimiter
 from app.steps.load_page import FetchError, load_page
 from app.steps.inline_upload import UploadError, inline_upload, safe_filename, unpack_upload_zip
 from app.steps.prepare_html import prepare_html
 
 
 ROOT = Path(__file__).resolve().parents[1]
+LOGGER = logging.getLogger("halloween.jobs")
+
+
+class JobDeadlineExceeded(TimeoutError):
+    pass
+
+
+def _log_step(job_id: str, step: str, started_at: float, outcome: str) -> None:
+    LOGGER.info(json.dumps({
+        "job_id": job_id,
+        "step": step,
+        "duration_ms": round((time.monotonic() - started_at) * 1000),
+        "outcome": outcome,
+    }, separators=(",", ":")))
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -25,7 +45,20 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config:
         app.config.update(test_config)
     app.config["JOBS"] = {}
-    app.config["UPLOAD_CACHE"] = OrderedDict()
+    app.config["RESULT_CACHE"] = OrderedDict()
+    app.config["UPLOAD_CACHE"] = app.config["RESULT_CACHE"]
+    app.config["CACHE_BYTES"] = 0
+    app.config["CACHE_LOCK"] = threading.RLock()
+    app.config["JOBS_LOCK"] = threading.RLock()
+    app.config["JOB_POOL"] = BoundedJobPool(
+        workers=app.config["JOB_WORKERS"],
+        max_pending=app.config["MAX_PENDING_JOBS"],
+    )
+    app.config["REQUEST_LIMITER"] = RequestLimiter(
+        burst=app.config["RATE_LIMIT_BURST"],
+        refill_seconds=app.config["RATE_LIMIT_WINDOW_S"],
+        daily_limit=app.config["DAILY_REQUEST_LIMIT"],
+    )
     app.config["MAX_CONTENT_LENGTH"] = (
         max(app.config["MAX_UPLOAD_ARCHIVE_BYTES"], app.config["MAX_UPLOAD_TOTAL_BYTES"])
         + 1024 * 1024
@@ -56,9 +89,212 @@ def create_app(test_config: dict | None = None) -> Flask:
     def index():
         return render_template("index.html", error=None, submitted_url="")
 
+    def enqueue_job(
+        *,
+        request_url: str,
+        html_source: str | None,
+        base_url: str,
+        source_id: str,
+        intensity: str,
+        provider_api_key: str,
+        upload_warnings: tuple[str, ...] = (),
+        variant: int = 0,
+    ) -> str | None:
+        jobs = app.config["JOBS"]
+        job_id = uuid4().hex
+        job = {
+            "status": "queued",
+            "progress": "Waiting for a worker",
+            "source_url": request_url,
+            "intensity": intensity,
+            "variant": variant,
+            "warning": "",
+            "error": "",
+            "upload_warnings": upload_warnings,
+        }
+        with app.config["JOBS_LOCK"]:
+            if len(jobs) >= app.config["MAX_STORED_JOBS"]:
+                terminal_job = next(
+                    (
+                        existing_id for existing_id, existing_job in jobs.items()
+                        if existing_job["status"] in {"done", "error"}
+                    ),
+                    None,
+                )
+                if terminal_job is None:
+                    return None
+                jobs.pop(terminal_job, None)
+            jobs[job_id] = job
+
+        def execute() -> None:
+            started_at = time.monotonic()
+            deadline = started_at + app.config["JOB_DEADLINE_S"]
+            current_step = "fetch"
+            step_started = started_at
+
+            def ensure_time() -> int:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise JobDeadlineExceeded("The decoration job exceeded its time limit.")
+                return max(1, int(remaining))
+
+            try:
+                job["status"] = "running"
+                if html_source is None:
+                    job["progress"] = "Fetching the page"
+                    step_started = time.monotonic()
+                    loaded_html, final_url = load_page(
+                        request_url,
+                        timeout=max(
+                            1,
+                            min(
+                                app.config["FETCH_TIMEOUT_S"],
+                                ensure_time() // (app.config["MAX_REDIRECTS"] + 1),
+                            ),
+                        ),
+                        max_bytes=app.config["MAX_PAGE_BYTES"],
+                        max_redirects=app.config["MAX_REDIRECTS"],
+                    )
+                    source_key = hashlib.sha256(
+                        (final_url + "\0" + loaded_html).encode("utf-8")
+                    ).hexdigest()
+                    _log_step(job_id, "fetch", step_started, "ok")
+                else:
+                    loaded_html = html_source
+                    final_url = request_url
+                    source_key = source_id
+
+                ensure_time()
+                job["progress"] = "Preparing the page"
+                current_step = "prepare"
+                step_started = time.monotonic()
+                safe_source = prepare_html(loaded_html, base_url or final_url or "https://uploaded.local/")
+                _log_step(job_id, "prepare", step_started, "ok")
+
+                current_step = "cache"
+                step_started = time.monotonic()
+                provider = app.config["PROVIDER"]
+                provider_base_url = app.config["PROVIDER_BASE_URL"]
+                model_name = app.config["MODEL_NAME"]
+                api_key_fingerprint = hashlib.sha256(
+                    provider_api_key.encode("utf-8")
+                ).hexdigest()
+                cache_key = (
+                    source_key, intensity, provider, model_name, provider_base_url,
+                    api_key_fingerprint, variant,
+                )
+                cache = app.config["RESULT_CACHE"]
+                result = None
+                with app.config["CACHE_LOCK"]:
+                    cached = cache.get(cache_key)
+                    if cached is not None:
+                        cache.move_to_end(cache_key)
+                        result = cached[0]
+                cache_hit = result is not None
+                _log_step(job_id, "cache", step_started, "hit" if cache_hit else "miss")
+                if result is None:
+                    ensure_time()
+                    job["progress"] = "Choosing decorations and building the preview"
+                    current_step = "design_and_assemble"
+                    step_started = time.monotonic()
+                    result = decorate_page(
+                        safe_source,
+                        source_url=final_url,
+                        intensity=intensity,
+                        provider=provider,
+                        provider_base_url=provider_base_url,
+                        provider_api_key=provider_api_key,
+                        model_name=model_name,
+                        model_timeout=max(
+                            1,
+                            min(app.config["MODEL_TIMEOUT_S"], ensure_time() // 2),
+                        ),
+                        variant=variant,
+                        source_id=source_key,
+                    )
+                    ensure_time()
+                    _log_step(job_id, "design_and_assemble", step_started, "ok")
+                    result_size = len(result["html"].encode("utf-8"))
+                    if result_size <= app.config["UPLOAD_CACHE_MAX_BYTES"]:
+                        with app.config["CACHE_LOCK"]:
+                            if cache_key not in cache:
+                                while (
+                                    cache
+                                    and app.config["CACHE_BYTES"] + result_size
+                                    > app.config["UPLOAD_CACHE_MAX_BYTES"]
+                                ):
+                                    _, (_, removed_size) = cache.popitem(last=False)
+                                    app.config["CACHE_BYTES"] -= removed_size
+                                cache[cache_key] = (result, result_size)
+                                app.config["CACHE_BYTES"] += result_size
+                warning_parts = [result["warning"]] if result["warning"] else []
+                warning_parts.extend(upload_warnings)
+                job.update({
+                    "status": "done",
+                    "progress": "Preview ready",
+                    "source_url": final_url,
+                    "original_html": safe_source,
+                    "decorated_html": result["html"],
+                    "theme": result["theme"],
+                    "design_mode": result["design_mode"],
+                    "warning": " ".join(warning_parts),
+                    "source_id": source_key,
+                    "cache_hit": cache_hit,
+                    "base_url": base_url or final_url,
+                })
+                _log_step(job_id, "job", started_at, "ok")
+            except (FetchError, ValueError, OSError, JobDeadlineExceeded) as exc:
+                _log_step(job_id, current_step, step_started, "error")
+                job.update({
+                    "status": "error",
+                    "progress": "Preview could not be created",
+                    "error": str(exc),
+                })
+                _log_step(job_id, "job", started_at, "error")
+            except Exception:
+                _log_step(job_id, current_step, step_started, "error")
+                job.update({
+                    "status": "error",
+                    "progress": "Preview could not be created",
+                    "error": "An unexpected error occurred while creating the preview.",
+                })
+                LOGGER.error(json.dumps({
+                    "job_id": job_id,
+                    "step": "job",
+                    "outcome": "unexpected_error",
+                }, separators=(",", ":")))
+
+        try:
+            future = app.config["JOB_POOL"].submit(execute)
+        except RuntimeError:
+            with app.config["JOBS_LOCK"]:
+                jobs.pop(job_id, None)
+            raise
+        if future is None:
+            with app.config["JOBS_LOCK"]:
+                jobs.pop(job_id, None)
+            return None
+        return job_id
+
     @app.post("/decorate")
     def decorate():
+        allowed, retry_after = app.config["REQUEST_LIMITER"].consume(
+            request.remote_addr or "unknown"
+        )
+        if not allowed:
+            response = app.make_response((
+                render_template(
+                    "index.html",
+                    error="Too many decoration requests. Please wait and try again.",
+                    submitted_url="",
+                ),
+                429,
+            ))
+            response.headers["Retry-After"] = str(retry_after)
+            return response
         source_url = request.form.get("url", "").strip()
+        transient_api_key = request.form.get("provider_api_key", "").strip()
+        provider_api_key = transient_api_key or app.config["PROVIDER_API_KEY"]
         intensity = request.form.get("intensity", "medium")
         if intensity not in {"low", "medium", "high"}:
             return render_template(
@@ -66,22 +302,31 @@ def create_app(test_config: dict | None = None) -> Flask:
                 error="Choose a valid decoration intensity.",
                 submitted_url=source_url,
             ), 400
-        html_upload = request.files.get("html_file")
-        zip_upload = request.files.get("zip_file")
-        asset_uploads = request.files.getlist("assets")
-        has_html_upload = bool(html_upload and html_upload.filename)
-        has_zip_upload = bool(zip_upload and zip_upload.filename)
-        provided_assets = [item for item in asset_uploads if item.filename]
-        source_id = ""
+        uploads = [item for item in request.files.getlist("uploads") if item.filename]
+        zip_uploads = []
+        html_uploads = []
+        provided_assets = []
+        for item in uploads:
+            filename = item.filename.lower()
+            if filename.endswith(".zip"):
+                zip_uploads.append(item)
+            elif filename.endswith((".html", ".htm")):
+                html_uploads.append(item)
+            else:
+                provided_assets.append(item)
+        has_zip_upload = bool(zip_uploads)
+        has_upload = bool(uploads)
         upload_warnings: tuple[str, ...] = ()
-        if has_html_upload or has_zip_upload:
+        html_source: str | None = None
+        base_url = ""
+        if uploads:
             if source_url:
                 return render_template(
                     "index.html",
                     error="Use either a public URL or a file upload, not both.",
                     submitted_url=source_url,
                 ), 400
-            if has_zip_upload and (has_html_upload or provided_assets):
+            if has_zip_upload and len(uploads) != 1:
                 return render_template(
                     "index.html",
                     error="Upload either one ZIP file or separate HTML and asset files, not both.",
@@ -89,8 +334,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 ), 400
             try:
                 if has_zip_upload:
-                    if not zip_upload.filename.lower().endswith(".zip"):
-                        raise UploadError("Upload a ZIP archive ending in .zip.")
+                    zip_upload = zip_uploads[0]
                     archive_bytes = zip_upload.stream.read(
                         app.config["MAX_UPLOAD_ARCHIVE_BYTES"] + 1
                     )
@@ -108,10 +352,24 @@ def create_app(test_config: dict | None = None) -> Flask:
                     html_bytes = uploaded_files.html_bytes
                     assets = uploaded_files.assets
                 else:
+                    if len(html_uploads) != 1:
+                        if len(html_uploads) > 1:
+                            raise UploadError("Upload exactly one HTML file.")
+                        if provided_assets:
+                            asset_extensions = {".css", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
+                            if all(
+                                "." + item.filename.rsplit(".", 1)[-1].lower() in asset_extensions
+                                for item in provided_assets
+                            ):
+                                raise UploadError(
+                                    "Upload an HTML file together with CSS or image assets."
+                                )
+                        raise UploadError("Choose a main file ending in .html or .htm, or one ZIP archive.")
                     if len(provided_assets) + 1 > app.config["MAX_UPLOAD_FILES"]:
                         raise UploadError(
                             f"Upload no more than {app.config['MAX_UPLOAD_FILES']} files at once."
                         )
+                    html_upload = html_uploads[0]
                     html_name = safe_filename(html_upload.filename)
                     html_bytes = html_upload.stream.read(
                         app.config["MAX_UPLOAD_HTML_BYTES"] + 1
@@ -143,12 +401,10 @@ def create_app(test_config: dict | None = None) -> Flask:
                     max_html_bytes=app.config["MAX_UPLOAD_HTML_BYTES"],
                     max_total_bytes=app.config["MAX_UPLOAD_TOTAL_BYTES"],
                 )
-                source_id = upload.source_id
                 upload_warnings = upload.warnings
-                source_html = upload.html
+                html_source = upload.html
                 source_url = ""
                 base_url = f"https://uploaded.local/{quote(html_name)}"
-                final_url = ""
             except UploadError as exc:
                 return render_template(
                     "index.html",
@@ -161,104 +417,27 @@ def create_app(test_config: dict | None = None) -> Flask:
                     error=f"Could not read the uploaded files: {exc}",
                     submitted_url="",
                 ), 400
-        elif provided_assets:
-            return render_template(
-                "index.html",
-                error="Upload an HTML file together with CSS or image assets.",
-                submitted_url=source_url,
-            ), 400
         elif not source_url:
             return render_template(
                 "index.html",
                 error="Enter a public website URL or choose an HTML file to upload.",
                 submitted_url="",
             ), 400
-        else:
-            try:
-                source_html, final_url = load_page(
-                    source_url,
-                    timeout=app.config["FETCH_TIMEOUT_S"],
-                    max_bytes=app.config["MAX_PAGE_BYTES"],
-                    max_redirects=app.config["MAX_REDIRECTS"],
-                )
-            except FetchError as exc:
-                return render_template(
-                    "index.html",
-                    error=str(exc),
-                    submitted_url=source_url,
-                ), 400
-            base_url = final_url
-            source_id = hashlib.sha256(final_url.encode("utf-8")).hexdigest()
-
-        try:
-            safe_source = prepare_html(source_html, base_url)
-        except ValueError as exc:
+        job_id = enqueue_job(
+            request_url=source_url,
+            html_source=html_source,
+            base_url=base_url,
+            source_id=upload.source_id if uploads else "",
+            intensity=intensity,
+            provider_api_key=provider_api_key,
+            upload_warnings=upload_warnings,
+        )
+        if job_id is None:
             return render_template(
                 "index.html",
-                error=str(exc),
-                submitted_url=source_url or "",
-            ), 400
-
-        provider = app.config["PROVIDER"]
-        model_name = app.config["MODEL_NAME"]
-        cache_key = (
-            source_id, intensity, provider, model_name, app.config["PROVIDER_BASE_URL"]
-        )
-        cache = app.config["UPLOAD_CACHE"]
-        result = None
-        cache_hit = False
-        if (has_html_upload or has_zip_upload) and cache_key in cache:
-            result = cache[cache_key]
-            cache.move_to_end(cache_key)
-            cache_hit = True
-        if result is None:
-            try:
-                result = decorate_page(
-                    safe_source,
-                    source_url=final_url,
-                    intensity=intensity,
-                    provider=provider,
-                    provider_base_url=app.config["PROVIDER_BASE_URL"],
-                    provider_api_key=app.config["PROVIDER_API_KEY"],
-                    model_name=model_name,
-                    model_timeout=app.config["MODEL_TIMEOUT_S"],
-                    source_id=source_id,
-                )
-            except ValueError as exc:
-                return render_template(
-                    "index.html",
-                    error=str(exc),
-                    submitted_url=source_url or "",
-                ), 400
-            if has_html_upload or has_zip_upload:
-                result_size = len(result["html"].encode("utf-8"))
-                if result_size <= app.config["UPLOAD_CACHE_MAX_BYTES"]:
-                    while cache and sum(
-                        entry[1] for entry in cache.values()
-                    ) + result_size > app.config["UPLOAD_CACHE_MAX_BYTES"]:
-                        cache.popitem(last=False)
-                    cache[cache_key] = (
-                        result,
-                        result_size,
-                    )
-        else:
-            result = result[0]
-
-        warning_parts = [result["warning"]] if result["warning"] else []
-        warning_parts.extend(upload_warnings)
-        warning = " ".join(warning_parts)
-        job_id = uuid4().hex
-        app.config["JOBS"][job_id] = {
-            "source_url": final_url,
-            "original_html": safe_source,
-            "decorated_html": result["html"],
-            "theme": result["theme"],
-            "intensity": intensity,
-            "design_mode": result["design_mode"],
-            "warning": warning,
-            "source_id": source_id,
-            "cache_hit": cache_hit,
-        }
+                error="The preview queue is full. Please wait a moment and try again.",
+                submitted_url=source_url,
+            ), 429
         return redirect(url_for("result_page", job_id=job_id), code=303)
 
     @app.get("/result/<job_id>")
@@ -271,11 +450,52 @@ def create_app(test_config: dict | None = None) -> Flask:
             abort(400)
         return render_template("result.html", job=job, job_id=job_id, view=view)
 
+    @app.get("/status/<job_id>")
+    def job_status(job_id: str):
+        job = app.config["JOBS"].get(job_id)
+        if job is None:
+            abort(404)
+        return jsonify(status=job["status"], progress=job["progress"], error=job["error"])
+
+    @app.post("/regenerate/<job_id>")
+    def regenerate(job_id: str):
+        allowed, retry_after = app.config["REQUEST_LIMITER"].consume(
+            request.remote_addr or "unknown"
+        )
+        if not allowed:
+            response = jsonify(error="Too many decoration requests. Please wait and try again.")
+            response.status_code = 429
+            response.headers["Retry-After"] = str(retry_after)
+            return response
+        previous = app.config["JOBS"].get(job_id)
+        if previous is None:
+            abort(404)
+        if previous["status"] != "done":
+            abort(409)
+        new_job_id = enqueue_job(
+            request_url=previous["source_url"],
+            html_source=previous["original_html"],
+            base_url=previous.get("base_url", ""),
+            source_id=previous["source_id"],
+            intensity=previous["intensity"],
+            provider_api_key=(
+                request.form.get("provider_api_key", "").strip()
+                or app.config["PROVIDER_API_KEY"]
+            ),
+            upload_warnings=tuple(previous.get("upload_warnings", ())),
+            variant=previous["variant"] + 1,
+        )
+        if new_job_id is None:
+            return jsonify(error="The preview queue is full. Please wait and try again."), 429
+        return redirect(url_for("result_page", job_id=new_job_id), code=303)
+
     @app.get("/render/<job_id>")
     def render_page(job_id: str):
         job = app.config["JOBS"].get(job_id)
         if job is None:
             abort(404)
+        if job["status"] != "done":
+            abort(409)
         view = request.args.get("view", "decorated")
         if view not in {"decorated", "original"}:
             abort(400)
