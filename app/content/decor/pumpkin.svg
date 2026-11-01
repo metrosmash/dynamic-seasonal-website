@@ -2,4 +2,8 @@
   <path d="M50 22c-4-10 1-15 10-17 2 8-1 13-10 17Z" fill="#91a96a"/>
   <path d="M50 20C22 7 8 25 8 49c0 22 17 34 42 34s42-12 42-34C92 25 78 7 50 20Z"/>
   <path d="M50 21c-9 5-13 17-13 28s4 24 13 32m0-60c9 5 13 17 13 28s-4 24-13 32" fill="none" stroke="#74381d" stroke-width="3"/>
+  <path class="hw-light" d="M28 52 41 52 34.5 38Z"/>
+  <path class="hw-light" d="M59 52 72 52 65.5 38Z"/>
+  <path class="hw-light" d="M50 55 45 63 55 63Z"/>
+  <path class="hw-light" d="M29 66 37 71 43 66 50 72 57 66 63 71 71 66 66 77Q50 84 34 77Z"/>
 </svg>

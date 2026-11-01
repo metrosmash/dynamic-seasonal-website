@@ -4,9 +4,10 @@ import re
 from urllib.parse import urlencode, urlsplit
 
 from bs4 import BeautifulSoup
-from bs4.element import Doctype, Tag
+from bs4.element import Doctype
 
-from app.content.decor_catalog import DECORATIONS, SLOTS_BY_TIER, load_decoration_svg
+from app.content.decor_css import decoration_css
+from app.content.decor_markup import plan_placements, render_decoration, render_root
 from app.content.themes import APPROVED_FONTS, THEMES, Palette
 from app.content.tiers import TIERS
 
@@ -40,7 +41,6 @@ def _theme_css(
     intensity: str,
     *,
     accent: str | None = None,
-    animated: tuple[str, ...] = (),
 ) -> str:
     theme = THEMES[theme_id]
     palette = _palette(theme_id, intensity)
@@ -54,29 +54,8 @@ def _theme_css(
         f"html body h{level}" for level in TIERS[intensity]["heading_levels"]
     )
     reset_selectors = ", ".join(
-        f"html body {selector.strip()}" for selector in RESET_CONTAINERS.split(",")
-    )
-    overlay = (
-        "body::before { content: ''; position: fixed; inset: 0; z-index: 2147482998; "
-        "pointer-events: none; background: radial-gradient(ellipse at center, transparent 58%, #0005); }"
-        if TIERS[intensity]["overlays"] else ""
-    )
-    animation_rules = {
-        "hw-flap": "50% { transform: translateY(-4px) rotate(4deg); }",
-        "hw-glow": "50% { filter: drop-shadow(0 0 12px var(--hw-accent)); }",
-        "hw-bob": "50% { transform: translateY(-8px); }",
-        "hw-sway": "50% { transform: rotate(8deg); }",
-        "hw-flicker": "50% { opacity: .78; }",
-    }
-    keyframes = "\n".join(
-        f"@keyframes {name} {{ 0%, 100% {{ }} {animation_rules[name]} }}"
-        for name in dict.fromkeys(animated)
-        if name in animation_rules
-    )
-    animations = "\n".join(
-        f".{name} {{ animation: {name} {2.4 + index * 0.3}s ease-in-out infinite; }}"
-        for index, name in enumerate(dict.fromkeys(animated))
-        if name in animation_rules
+        f":where(html body {selector.strip()}:not([data-hw-added]))"
+        for selector in RESET_CONTAINERS.split(",")
     )
     return f"""
 :root {{
@@ -100,26 +79,6 @@ html body a:visited {{ color: {palette.link} !important; }}
   font-family: "{heading_font}", Georgia, serif;
 }}
 {f'html body blockquote {{ font-family: "{accent_font}", Georgia, serif; }}' if intensity == "high" else ""}
-.hw-added {{ box-sizing: border-box; pointer-events: none; }}
-html body .hw-decoration {{ display: block; width: min(var(--hw-size), 100%); color: var(--hw-accent) !important; }}
-.hw-decoration svg {{ display: block; width: 100%; height: auto; overflow: visible; }}
-.hw-slot-top-left, .hw-slot-top-right {{
-  position: fixed; z-index: 2147483000; top: 1rem; width: min(var(--hw-size), 18vw);
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--hw-accent), transparent 45%));
-}}
-.hw-slot-top-left {{ left: 1rem; }}
-.hw-slot-top-right {{ right: 1rem; }}
-.hw-slot-margin-left, .hw-slot-margin-right {{
-  position: fixed; z-index: 2147482999; top: 40%; width: min(var(--hw-size), 10vw);
-}}
-.hw-slot-margin-left {{ left: .5rem; }}
-.hw-slot-margin-right {{ right: .5rem; }}
-.hw-slot-header, .hw-slot-footer, .hw-slot-before-h2 {{
-  width: min(var(--hw-size), 20vw); margin: .75rem auto; opacity: .92;
-}}
-.hw-slot-float {{
-  position: fixed; z-index: 2147482999; left: 2vw; top: 38%; width: min(var(--hw-size), 12vw);
-}}
 html body .hw-banner {{
   margin: 0 auto 1rem; padding: .65rem 1rem; width: fit-content; max-width: 100%;
   border: 1px solid var(--hw-accent); border-radius: .65rem;
@@ -127,20 +86,6 @@ html body .hw-banner {{
   font: 700 1rem/1.4 "{heading_font}", Georgia, serif;
 }}
 .hw-attribution {{ margin: 1rem auto; padding: .5rem 1rem; text-align: center; font-size: .85rem; }}
-@media (max-width: 900px) {{
-  .hw-slot-margin-left, .hw-slot-margin-right {{ display: none; }}
-}}
-@media (max-width: 600px) {{
-  .hw-slot-top-left, .hw-slot-top-right {{ width: min(42px, 12vw); opacity: .75; }}
-}}
-@media (prefers-reduced-motion: no-preference) {{
-  {keyframes}
-  {animations}
-}}
-@media (prefers-reduced-motion: reduce) {{
-  .hw-decoration {{ animation: none !important; transition: none !important; }}
-}}
-{overlay}
 """.strip()
 
 
@@ -161,45 +106,6 @@ def _font_stylesheet(soup: BeautifulSoup, theme_id: str) -> None:
         attrs={"data-hw-added": "fonts"},
     )
     soup.head.append(link)
-
-
-def _decoration_node(soup: BeautifulSoup, name: str, slot: str, animation: str) -> Tag:
-    entry = DECORATIONS[name]
-    slot_name = slot.split(":", 1)[0]
-    svg = load_decoration_svg(name)
-    node = BeautifulSoup(
-        f'<div class="hw-added hw-decoration hw-slot-{slot_name} {animation}" '
-        f'data-hw-added="decoration" aria-hidden="true">{svg}</div>',
-        "html.parser",
-    ).div
-    node["data-hw-slot"] = slot
-    node["style"] = f'--hw-size: {entry["size"]}px'
-    return node
-
-
-def _supported_placements(
-    placements: tuple[tuple[str, str], ...],
-    intensity: str,
-) -> tuple[tuple[str, str], ...]:
-    result: list[tuple[str, str]] = []
-    for name, slot in placements:
-        if name not in DECORATIONS:
-            continue
-        slot_name = slot.split(":", 1)[0]
-        if slot_name not in DECORATIONS[name]["slots"] or slot_name not in SLOTS_BY_TIER[intensity]:
-            continue
-        if (slot_name == "before-h2") != (":" in slot):
-            continue
-        if slot_name == "before-h2":
-            try:
-                if int(slot.split(":", 1)[1]) < 1:
-                    continue
-            except (IndexError, ValueError):
-                continue
-        result.append((name, slot))
-        if len(result) >= TIERS[intensity]["max_decorations"]:
-            break
-    return tuple(result)
 
 
 def assemble_page(
@@ -224,17 +130,13 @@ def assemble_page(
     if soup.body is None:
         soup.html.append(soup.new_tag("body"))
 
-    placements = _supported_placements(placements, intensity)
-    style = soup.new_tag("style", attrs={"data-hw-added": "theme"})
-    animated: list[str] = []
-    animation_cap = TIERS[intensity]["animations"]
-    for name, _ in placements:
-        animation = DECORATIONS[name]["animation"]
-        if animation and animation not in animated and len(animated) < animation_cap:
-            animated.append(animation)
-    style.string = _theme_css(
-        theme_id, intensity, accent=accent, animated=tuple(animated)
+    planned, _warnings = plan_placements(
+        list(placements),
+        intensity,
+        h2_count=len(soup.body.find_all("h2")),
     )
+    style = soup.new_tag("style", attrs={"data-hw-added": "theme"})
+    style.string = _theme_css(theme_id, intensity, accent=accent) + "\n" + decoration_css(intensity)
     soup.head.append(style)
     _font_stylesheet(soup, theme_id)
 
@@ -251,40 +153,21 @@ def assemble_page(
         else:
             soup.body.insert(0, banner)
 
-    limited_placements = placements[:TIERS[intensity]["max_decorations"]]
-    assigned_animations: list[str] = []
-    animation_count = 0
-    for name, _ in limited_placements:
-        animation = DECORATIONS[name]["animation"]
-        if animation and animation_count < animation_cap:
-            assigned_animations.append(animation)
-            animation_count += 1
-        else:
-            assigned_animations.append("")
-    for placement_index, (name, slot) in enumerate(limited_placements):
-        if name not in DECORATIONS or slot.split(":", 1)[0] not in DECORATIONS[name]["slots"]:
+    for placement in planned:
+        if placement.overlay:
             continue
-        animation_class = assigned_animations[placement_index]
-        node = _decoration_node(soup, name, slot, animation_class)
-        slot_name = slot.split(":", 1)[0]
-        if slot_name in {"top-left", "top-right", "margin-left", "margin-right", "float"}:
-            soup.body.insert(0, node)
-        elif slot_name == "header":
+        node = BeautifulSoup(render_decoration(placement), "html.parser").div
+        if placement.base == "header":
             heading = soup.body.find("h1")
             if heading:
                 heading.insert_after(node)
             else:
                 soup.body.insert(0, node)
-        elif slot_name == "footer":
+        elif placement.base == "footer":
             soup.body.append(node)
-        elif slot_name == "before-h2":
-            try:
-                heading_index = int(slot.split(":", 1)[1])
-            except (IndexError, ValueError):
-                continue
+        elif placement.base == "before-h2" and placement.index is not None:
             headings = soup.body.find_all("h2")
-            if 1 <= heading_index <= len(headings):
-                headings[heading_index - 1].insert_before(node)
+            headings[placement.index - 1].insert_before(node)
 
     attribution = soup.new_tag("p", attrs={
         "class": "hw-added hw-attribution",
@@ -309,4 +192,7 @@ def assemble_page(
         license_link.string = "CC BY-SA 4.0"
         attribution.append(license_link)
     soup.body.append(attribution)
+    root = BeautifulSoup(render_root(planned, intensity), "html.parser").div
+    if root is not None:
+        soup.body.append(root)
     return "<!doctype html>\n" + str(soup)
