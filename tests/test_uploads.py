@@ -3,9 +3,15 @@ from __future__ import annotations
 import io
 import unittest
 from unittest.mock import patch
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from app import create_app
-from app.steps.inline_upload import UploadError, inline_upload, validate_uploads
+from app.steps.inline_upload import (
+    UploadError,
+    inline_upload,
+    unpack_upload_zip,
+    validate_uploads,
+)
 
 
 UPLOAD_HTML = b"""<!doctype html>
@@ -35,6 +41,14 @@ def _upload_data(
             (io.BytesIO(content), name) for name, content in assets.items()
         ]
     return data
+
+
+def _zip_bytes(files: dict[str, bytes]) -> bytes:
+    output = io.BytesIO()
+    with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
+        for filename, content in files.items():
+            archive.writestr(filename, content)
+    return output.getvalue()
 
 
 class InlineUploadTests(unittest.TestCase):
@@ -98,6 +112,103 @@ class InlineUploadTests(unittest.TestCase):
                 max_total_bytes=2048,
             )
 
+    def test_unpacks_zip_with_one_html_and_assets(self):
+        individual = inline_upload("index.html", UPLOAD_HTML, UPLOAD_FILES)
+        uploaded = unpack_upload_zip(
+            _zip_bytes({
+                "site/index.html": UPLOAD_HTML,
+                "site/site.css": UPLOAD_CSS,
+                "site/lantern.png": UPLOAD_PNG,
+            }),
+            max_html_bytes=1024,
+            max_total_bytes=4096,
+            max_files=8,
+        )
+
+        self.assertEqual(uploaded.html_name, "index.html")
+        self.assertEqual(uploaded.html_bytes, UPLOAD_HTML)
+        self.assertEqual(uploaded.assets, UPLOAD_FILES)
+        zipped = inline_upload(uploaded.html_name, uploaded.html_bytes, uploaded.assets)
+        self.assertEqual(zipped.source_id, individual.source_id)
+
+    def test_rejects_invalid_zip_without_html_or_with_multiple_html_files(self):
+        with self.assertRaisesRegex(UploadError, "invalid or damaged"):
+            unpack_upload_zip(
+                b"not a zip",
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+        with self.assertRaisesRegex(UploadError, "exactly one HTML"):
+            unpack_upload_zip(
+                _zip_bytes({"one.html": b"<h1>One</h1>", "two.htm": b"<h1>Two</h1>"}),
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+        with self.assertRaisesRegex(UploadError, "must contain one"):
+            unpack_upload_zip(
+                _zip_bytes({"style.css": b"h1{}"}),
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+
+    def test_rejects_unsafe_paths_unsupported_files_and_file_count(self):
+        with self.assertRaisesRegex(UploadError, "unsafe path"):
+            unpack_upload_zip(
+                _zip_bytes({"../index.html": UPLOAD_HTML}),
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+        with self.assertRaisesRegex(UploadError, "Unsupported file type"):
+            unpack_upload_zip(
+                _zip_bytes({"index.html": UPLOAD_HTML, "run.js": b"alert(1)"}),
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+        with self.assertRaisesRegex(UploadError, "no more than 1 files"):
+            unpack_upload_zip(
+                _zip_bytes({"index.html": UPLOAD_HTML, "site.css": UPLOAD_CSS}),
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=1,
+            )
+
+    def test_rejects_zip_symbolic_links(self):
+        output = io.BytesIO()
+        with ZipFile(output, "w") as archive:
+            archive.writestr("index.html", UPLOAD_HTML)
+            symlink = ZipInfo("linked.css")
+            symlink.external_attr = (0o120777 << 16)
+            archive.writestr(symlink, "target.css")
+
+        with self.assertRaisesRegex(UploadError, "symbolic links"):
+            unpack_upload_zip(
+                output.getvalue(),
+                max_html_bytes=1024,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+
+    def test_zip_total_and_html_caps_apply_to_decompressed_bytes(self):
+        with self.assertRaisesRegex(UploadError, "HTML file exceeds"):
+            unpack_upload_zip(
+                _zip_bytes({"index.html": b"x" * 100}),
+                max_html_bytes=20,
+                max_total_bytes=4096,
+                max_files=8,
+            )
+        with self.assertRaisesRegex(UploadError, "total limit"):
+            unpack_upload_zip(
+                _zip_bytes({"index.html": b"<h1>ok</h1>", "site.css": b"a" * 100}),
+                max_html_bytes=1024,
+                max_total_bytes=40,
+                max_files=8,
+            )
+
 
 class UploadRouteTests(unittest.TestCase):
     def setUp(self):
@@ -106,6 +217,7 @@ class UploadRouteTests(unittest.TestCase):
             "PROVIDER": "fake",
             "MAX_UPLOAD_HTML_BYTES": 1024,
             "MAX_UPLOAD_TOTAL_BYTES": 4096,
+            "MAX_UPLOAD_ARCHIVE_BYTES": 4096,
             "UPLOAD_CACHE_MAX_BYTES": 8192,
             "MAX_UPLOAD_FILES": 8,
         })
@@ -117,6 +229,13 @@ class UploadRouteTests(unittest.TestCase):
             data=_upload_data(**kwargs),
             content_type="multipart/form-data",
         )
+
+    def test_homepage_offers_zip_upload(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="zip_file"', response.data)
+        self.assertIn(b"one HTML file and its CSS/images", response.data)
 
     @patch("app.pipeline.fake.complete")
     def test_upload_decorates_and_repeated_upload_hits_cache(self, complete):
@@ -162,6 +281,69 @@ class UploadRouteTests(unittest.TestCase):
         self.assertIn(b"HTML file exceeds", oversized.data)
         self.assertEqual(wrong_extension.status_code, 400)
         self.assertIn(b"ending in .html or .htm", wrong_extension.data)
+
+    @patch("app.pipeline.fake.complete")
+    def test_zip_upload_decorates_and_caches_by_contents(self, complete):
+        complete.return_value = (
+            "THEME: pumpkin-patch\nACCENT: #ff7a1a\nPLACE: bat @ top-right"
+        )
+        archive_bytes = _zip_bytes({
+            "site/index.html": UPLOAD_HTML,
+            "site/site.css": UPLOAD_CSS,
+            "site/lantern.png": UPLOAD_PNG,
+        })
+
+        first = self.client.post(
+            "/decorate",
+            data={
+                "zip_file": (io.BytesIO(archive_bytes), "site.zip"),
+                "intensity": "medium",
+            },
+            content_type="multipart/form-data",
+        )
+        first_job = next(iter(self.app.config["JOBS"].values()))
+        second = self.client.post(
+            "/decorate",
+            data={
+                "zip_file": (io.BytesIO(archive_bytes), "site.zip"),
+                "intensity": "medium",
+            },
+            content_type="multipart/form-data",
+        )
+        second_job = list(self.app.config["JOBS"].values())[-1]
+
+        self.assertEqual(first.status_code, 303)
+        self.assertEqual(second.status_code, 303)
+        self.assertEqual(first_job["source_id"], second_job["source_id"])
+        self.assertFalse(first_job["cache_hit"])
+        self.assertTrue(second_job["cache_hit"])
+        self.assertIn("data-uploaded-stylesheet", first_job["original_html"])
+        self.assertIn("data:image/png;base64,", first_job["original_html"])
+        self.assertEqual(complete.call_count, 1)
+
+    def test_zip_route_reports_bad_archive_and_rejects_mixed_inputs(self):
+        invalid_archive = self.client.post(
+            "/decorate",
+            data={
+                "zip_file": (io.BytesIO(b"not zip"), "site.zip"),
+                "intensity": "medium",
+            },
+            content_type="multipart/form-data",
+        )
+        mixed_inputs = self.client.post(
+            "/decorate",
+            data={
+                "zip_file": (io.BytesIO(_zip_bytes({"index.html": UPLOAD_HTML})), "site.zip"),
+                "html_file": (io.BytesIO(UPLOAD_HTML), "index.html"),
+                "intensity": "medium",
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(invalid_archive.status_code, 400)
+        self.assertIn(b"invalid or damaged", invalid_archive.data)
+        self.assertEqual(mixed_inputs.status_code, 400)
+        self.assertIn(b"either one ZIP file", mixed_inputs.data)
 
     @patch("app.load_page")
     def test_existing_url_flow_still_works(self, load):

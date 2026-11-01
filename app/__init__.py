@@ -12,7 +12,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from app.config import load_config
 from app.pipeline import decorate_page
 from app.steps.load_page import FetchError, load_page
-from app.steps.inline_upload import UploadError, inline_upload, safe_filename
+from app.steps.inline_upload import UploadError, inline_upload, safe_filename, unpack_upload_zip
 from app.steps.prepare_html import prepare_html
 
 
@@ -26,7 +26,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.config.update(test_config)
     app.config["JOBS"] = {}
     app.config["UPLOAD_CACHE"] = OrderedDict()
-    app.config["MAX_CONTENT_LENGTH"] = app.config["MAX_UPLOAD_TOTAL_BYTES"] + 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = (
+        max(app.config["MAX_UPLOAD_ARCHIVE_BYTES"], app.config["MAX_UPLOAD_TOTAL_BYTES"])
+        + 1024 * 1024
+    )
 
     @app.errorhandler(RequestEntityTooLarge)
     def request_too_large(_error):
@@ -64,45 +67,75 @@ def create_app(test_config: dict | None = None) -> Flask:
                 submitted_url=source_url,
             ), 400
         html_upload = request.files.get("html_file")
+        zip_upload = request.files.get("zip_file")
         asset_uploads = request.files.getlist("assets")
         has_html_upload = bool(html_upload and html_upload.filename)
+        has_zip_upload = bool(zip_upload and zip_upload.filename)
         provided_assets = [item for item in asset_uploads if item.filename]
         source_id = ""
         upload_warnings: tuple[str, ...] = ()
-        if has_html_upload:
+        if has_html_upload or has_zip_upload:
             if source_url:
                 return render_template(
                     "index.html",
-                    error="Use either a public URL or an HTML upload, not both.",
+                    error="Use either a public URL or a file upload, not both.",
                     submitted_url=source_url,
                 ), 400
-            if len(provided_assets) + 1 > app.config["MAX_UPLOAD_FILES"]:
+            if has_zip_upload and (has_html_upload or provided_assets):
                 return render_template(
                     "index.html",
-                    error=f"Upload no more than {app.config['MAX_UPLOAD_FILES']} files at once.",
+                    error="Upload either one ZIP file or separate HTML and asset files, not both.",
                     submitted_url="",
                 ), 400
             try:
-                html_name = safe_filename(html_upload.filename)
-                html_bytes = html_upload.stream.read(app.config["MAX_UPLOAD_HTML_BYTES"] + 1)
-                assets: dict[str, bytes] = {}
-                consumed_bytes = len(html_bytes)
-                if consumed_bytes > app.config["MAX_UPLOAD_HTML_BYTES"]:
-                    raise UploadError(
-                        f"The HTML file exceeds the {app.config['MAX_UPLOAD_HTML_BYTES']}-byte limit."
+                if has_zip_upload:
+                    if not zip_upload.filename.lower().endswith(".zip"):
+                        raise UploadError("Upload a ZIP archive ending in .zip.")
+                    archive_bytes = zip_upload.stream.read(
+                        app.config["MAX_UPLOAD_ARCHIVE_BYTES"] + 1
                     )
-                for uploaded in provided_assets:
-                    safe_name = safe_filename(uploaded.filename)
-                    if any(existing.casefold() == safe_name.casefold() for existing in assets):
-                        raise UploadError(f"More than one uploaded file has the name {safe_name}.")
-                    remaining = app.config["MAX_UPLOAD_TOTAL_BYTES"] - consumed_bytes
-                    content = uploaded.stream.read(remaining + 1)
-                    consumed_bytes += len(content)
-                    if consumed_bytes > app.config["MAX_UPLOAD_TOTAL_BYTES"]:
+                    if len(archive_bytes) > app.config["MAX_UPLOAD_ARCHIVE_BYTES"]:
                         raise UploadError(
-                            "The uploaded files exceed the configured total size limit."
+                            f"The ZIP file exceeds the {app.config['MAX_UPLOAD_ARCHIVE_BYTES']}-byte limit."
                         )
-                    assets[safe_name] = content
+                    uploaded_files = unpack_upload_zip(
+                        archive_bytes,
+                        max_html_bytes=app.config["MAX_UPLOAD_HTML_BYTES"],
+                        max_total_bytes=app.config["MAX_UPLOAD_TOTAL_BYTES"],
+                        max_files=app.config["MAX_UPLOAD_FILES"],
+                    )
+                    html_name = uploaded_files.html_name
+                    html_bytes = uploaded_files.html_bytes
+                    assets = uploaded_files.assets
+                else:
+                    if len(provided_assets) + 1 > app.config["MAX_UPLOAD_FILES"]:
+                        raise UploadError(
+                            f"Upload no more than {app.config['MAX_UPLOAD_FILES']} files at once."
+                        )
+                    html_name = safe_filename(html_upload.filename)
+                    html_bytes = html_upload.stream.read(
+                        app.config["MAX_UPLOAD_HTML_BYTES"] + 1
+                    )
+                    assets = {}
+                    consumed_bytes = len(html_bytes)
+                    if consumed_bytes > app.config["MAX_UPLOAD_HTML_BYTES"]:
+                        raise UploadError(
+                            f"The HTML file exceeds the {app.config['MAX_UPLOAD_HTML_BYTES']}-byte limit."
+                        )
+                    for uploaded in provided_assets:
+                        safe_name = safe_filename(uploaded.filename)
+                        if any(existing.casefold() == safe_name.casefold() for existing in assets):
+                            raise UploadError(
+                                f"More than one uploaded file has the name {safe_name}."
+                            )
+                        remaining = app.config["MAX_UPLOAD_TOTAL_BYTES"] - consumed_bytes
+                        content = uploaded.stream.read(remaining + 1)
+                        consumed_bytes += len(content)
+                        if consumed_bytes > app.config["MAX_UPLOAD_TOTAL_BYTES"]:
+                            raise UploadError(
+                                "The uploaded files exceed the configured total size limit."
+                            )
+                        assets[safe_name] = content
                 upload = inline_upload(
                     html_name,
                     html_bytes,
@@ -174,7 +207,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         cache = app.config["UPLOAD_CACHE"]
         result = None
         cache_hit = False
-        if has_html_upload and cache_key in cache:
+        if (has_html_upload or has_zip_upload) and cache_key in cache:
             result = cache[cache_key]
             cache.move_to_end(cache_key)
             cache_hit = True
@@ -197,7 +230,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     error=str(exc),
                     submitted_url=source_url or "",
                 ), 400
-            if has_html_upload:
+            if has_html_upload or has_zip_upload:
                 result_size = len(result["html"].encode("utf-8"))
                 if result_size <= app.config["UPLOAD_CACHE_MAX_BYTES"]:
                     while cache and sum(

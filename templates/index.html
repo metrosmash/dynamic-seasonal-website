@@ -10,7 +10,7 @@
   <main class="panel">
     <p class="eyebrow">A seasonal site makeover</p>
     <h1>Give a website a little Halloween spirit.</h1>
-    <p class="intro">Enter a public website URL or upload an HTML page with its CSS and images to preview a Halloween-decorated snapshot. Simple pages work best; login-required and JavaScript-heavy sites may not render completely.</p>
+    <p class="intro">Enter a public website URL, upload an HTML page with its CSS and images, or upload a ZIP containing those files to preview a Halloween-decorated snapshot. Simple pages work best; login-required and JavaScript-heavy sites may not render completely.</p>
 
     {% if error %}
     <div class="notice error" role="alert">{{ error }}</div>
@@ -23,7 +23,9 @@
       <input id="html_file" name="html_file" type="file" accept=".html,.htm,text/html">
       <label for="assets">Related CSS and image files (optional)</label>
       <input id="assets" name="assets" type="file" accept=".css,.png,.jpg,.jpeg,.gif,.webp" multiple>
-      <p class="fine-print">Upload any CSS or images referenced by the HTML. Supported images: PNG, JPG, GIF, and WebP.</p>
+      <label for="zip_file">Or upload a ZIP with one HTML file and its CSS/images</label>
+      <input id="zip_file" name="zip_file" type="file" accept=".zip,application/zip">
+      <p class="fine-print">Upload any CSS or images referenced by the HTML. Supported images: PNG, JPG, GIF, and WebP. Choose either a ZIP file or the separate HTML/assets inputs.</p>
       <label for="intensity">Decoration intensity</label>
       <select id="intensity" name="intensity">
         <option value="low">Low - subtle autumn accents</option>

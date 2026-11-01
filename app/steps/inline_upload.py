@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import re
+import zlib
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from urllib.parse import unquote, urlsplit
+from zipfile import BadZipFile, ZipFile
 
 from bs4 import BeautifulSoup
 
@@ -29,6 +33,13 @@ class InlineUploadResult:
     html: str
     source_id: str
     warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UploadFiles:
+    html_name: str
+    html_bytes: bytes
+    assets: dict[str, bytes]
 
 
 def safe_filename(filename: str) -> str:
@@ -72,6 +83,86 @@ def validate_uploads(
     if total_bytes > max_total_bytes:
         raise UploadError(f"The uploaded files exceed the {max_total_bytes}-byte total limit.")
     return html_name, html_bytes, validated_assets
+
+
+def unpack_upload_zip(
+    archive_bytes: bytes,
+    *,
+    max_html_bytes: int,
+    max_total_bytes: int,
+    max_files: int,
+) -> UploadFiles:
+    try:
+        archive = ZipFile(io.BytesIO(archive_bytes))
+    except (BadZipFile, OSError) as exc:
+        raise UploadError("The uploaded ZIP file is invalid or damaged.") from exc
+
+    html_files: list[tuple[str, bytes]] = []
+    assets: dict[str, bytes] = {}
+    seen_names: set[str] = set()
+    total_bytes = 0
+    file_count = 0
+    with archive:
+        entries = archive.infolist()
+        if len(entries) > max_files + 64:
+            raise UploadError("The ZIP file contains too many entries.")
+        for info in entries:
+            path = PurePosixPath(info.filename.replace("\\", "/"))
+            if (
+                path.is_absolute()
+                or ".." in path.parts
+                or (path.parts and path.parts[0].endswith(":"))
+            ):
+                raise UploadError("The ZIP file contains an unsafe path.")
+            mode = info.external_attr >> 16
+            if mode & 0o170000 == 0o120000:
+                raise UploadError("The ZIP file cannot contain symbolic links.")
+            if info.is_dir():
+                continue
+            filename = safe_filename(info.filename)
+            extension = _extension(filename)
+            if extension not in HTML_EXTENSIONS and extension != ".css" and extension not in IMAGE_MIME_TYPES:
+                raise UploadError(
+                    f"Unsupported file type for {filename} in ZIP. Include HTML, CSS, PNG, JPG, GIF, or WebP files."
+                )
+            if filename.casefold() in seen_names:
+                raise UploadError(f"More than one ZIP entry has the name {filename}.")
+            seen_names.add(filename.casefold())
+            file_count += 1
+            if file_count > max_files:
+                raise UploadError(f"The ZIP file may contain no more than {max_files} files.")
+            if info.flag_bits & 0x1:
+                raise UploadError("Password-protected ZIP files are not supported.")
+
+            if extension in HTML_EXTENSIONS:
+                if html_files:
+                    raise UploadError("The ZIP file must contain exactly one HTML file.")
+                read_limit = min(max_html_bytes, max_total_bytes - total_bytes)
+            else:
+                read_limit = max_total_bytes - total_bytes
+            if read_limit < 0:
+                raise UploadError(f"The ZIP contents exceed the {max_total_bytes}-byte total limit.")
+            try:
+                with archive.open(info) as member:
+                    content = member.read(read_limit + 1)
+            except (BadZipFile, OSError, RuntimeError, EOFError, NotImplementedError, zlib.error) as exc:
+                raise UploadError("A file in the ZIP could not be read.") from exc
+            if len(content) > read_limit:
+                if extension in HTML_EXTENSIONS:
+                    if len(content) > max_html_bytes:
+                        raise UploadError(f"The HTML file exceeds the {max_html_bytes}-byte limit.")
+                raise UploadError(f"The ZIP contents exceed the {max_total_bytes}-byte total limit.")
+            total_bytes += len(content)
+            if extension in HTML_EXTENSIONS:
+                html_files.append((filename, content))
+            else:
+                assets[filename] = content
+
+    if not html_files:
+        raise UploadError("The ZIP file must contain one .html or .htm file.")
+    if not html_files[0][1]:
+        raise UploadError("The uploaded HTML file is empty.")
+    return UploadFiles(html_files[0][0], html_files[0][1], assets)
 
 
 def _extension(filename: str) -> str:
