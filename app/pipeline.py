@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from app.brief import build_prompt
+from app.content.themes import select_theme
 from app.parser import parse_design_response, summarize_html
 from app.providers import fake
 from app.providers import openai_compat
 from app.steps.load_page import FetchError
 from app.steps.assemble import assemble_page
-
-MILESTONE1_PLACEMENTS = {"top-right"}
 
 
 def decorate_page(
@@ -20,14 +19,16 @@ def decorate_page(
     provider_api_key: str,
     model_name: str,
     model_timeout: int,
+    variant: int = 0,
 ) -> dict[str, str]:
     summary = summarize_html(source_html)
-    prompt = build_prompt(summary, intensity)
+    theme = select_theme(source_url, intensity, variant)
+    prompt = build_prompt(summary, intensity, theme.id)
     warning = ""
     design_mode = "AI design"
 
     if provider == "none":
-        response = "THEME: pumpkin-patch\nACCENT: #ff7a1a\nPLACE: moon @ top-right"
+        response = ""
         design_mode = "code-only design"
     elif provider == "fake":
         response = fake.complete(
@@ -49,48 +50,34 @@ def decorate_page(
                 timeout_s=model_timeout,
             )
         except (FetchError, ValueError) as exc:
-            response = "THEME: pumpkin-patch\nACCENT: #ff7a1a\nPLACE: moon @ top-right"
+            response = ""
             design_mode = "code-only design"
-            warning = f"AI design unavailable ({exc}); showing the built-in Halloween design instead."
+            warning = f"AI design unavailable ({exc}); showing the built-in {theme.id} design instead."
     else:
         raise ValueError("Unsupported provider configuration.")
 
     design = parse_design_response(response, intensity)
-    if not design.compliant:
-        design = parse_design_response(
-            "THEME: pumpkin-patch\nACCENT: #ff7a1a\nPLACE: moon @ top-right",
-            intensity,
-        )
+    placements = design.placements
+    if not placements:
+        placements = theme.defaults[intensity]
+    if not design.compliant and provider not in {"none"}:
         design_mode = "code-only design"
-        warning = "The AI response did not match the supported design format; showing the built-in design."
-
-    theme = design.theme if design.theme == "pumpkin-patch" else "pumpkin-patch"
-    accent = design.accent or "#ff7a1a"
-    placement = next(
-        (
-            (name, slot)
-            for name, slot in design.placements
-            if name in {"moon", "pumpkin"} and slot in MILESTONE1_PLACEMENTS
-        ),
-        ("moon", "top-right"),
-    )
-    if placement == ("moon", "top-right") and not any(
-        name == "moon" and slot == "top-right" for name, slot in design.placements
-    ):
         warning = warning or (
-            "This first version supports one moon or pumpkin decoration in the top-right corner; "
-            "other model placements are not applied yet."
+            f"The AI response did not include a supported decoration; showing the built-in "
+            f"{theme.id} design."
         )
+
     decorated = assemble_page(
         source_html,
         source_url=source_url,
-        accent=accent,
-        placement=placement,
+        accent=design.accent,
+        placements=placements,
+        theme_id=theme.id,
         intensity=intensity,
     )
     return {
         "html": decorated,
-        "theme": theme,
+        "theme": theme.id,
         "design_mode": design_mode,
         "warning": warning,
     }

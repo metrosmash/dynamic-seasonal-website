@@ -95,6 +95,15 @@ def test_parser_handles_very_long_lines(valid_design_response):
     assert design.theme == "pumpkin-patch"
 
 
+def test_parser_drops_placement_with_excessively_long_heading_index():
+    design = parse_design_response(
+        "PLACE: pumpkin @ before-h2:" + "9" * 5000,
+        "high",
+    )
+
+    assert design.placements == ()
+
+
 def test_place_label_inside_css_comment_is_not_a_placement():
     design = parse_design_response(
         """THEME: pumpkin-patch
@@ -152,6 +161,22 @@ class SpikeTests(unittest.TestCase):
         self.assertIn("A heading", prompt)
         self.assertIn("Output only the labelled lines", prompt)
 
+    def test_prompt_uses_assigned_theme_and_its_palette(self):
+        prompt = build_prompt(
+            {
+                "title": "Sample",
+                "word_count": 40,
+                "h2_count": 1,
+                "headings": [(1, "A heading")],
+            },
+            "medium",
+            "graveyard-fog",
+        )
+
+        self.assertIn("Assigned theme: graveyard-fog", prompt)
+        self.assertIn("THEME: graveyard-fog", prompt)
+        self.assertIn("ACCENT: #a9d8bd", prompt)
+
     def test_low_tier_prompt_does_not_show_disallowed_slots_or_css(self):
         summary = {
             "title": "Sample",
@@ -197,7 +222,7 @@ h1 { letter-spacing: 0.04em; }
         self.assertEqual(design.placements, (("bat", "top-right"), ("pumpkin", "before-h2:2")))
         self.assertEqual(design.css, "h1 { letter-spacing: 0.04em; }")
 
-    def test_design_parser_flags_unknown_and_over_budget_choices(self):
+    def test_design_parser_drops_unknown_and_tier_disallowed_choices(self):
         response = """THEME: not-a-theme
 ACCENT: orange
 PLACE: dragon @ top-right
@@ -206,18 +231,35 @@ PLACE: bat @ float"""
         design = parse_design_response(response, "low")
 
         self.assertFalse(design.compliant)
-        self.assertIn("unknown theme", design.issues)
-        self.assertIn("invalid accent line", design.issues)
-        self.assertIn("unknown decoration or slot", design.issues)
-        self.assertIn("placement exceeds tier", design.issues)
+        self.assertIsNone(design.theme)
+        self.assertIsNone(design.accent)
+        self.assertEqual(design.placements, ())
 
-    def test_low_tier_rejects_model_css(self):
+    def test_low_tier_drops_model_css(self):
         design = parse_design_response(
             "PLACE: bat @ top-right\nCSS:\nh1 { color: red; }",
             "low",
         )
 
-        self.assertIn("CSS exceeds tier budget", design.issues)
+        self.assertEqual(design.css, "")
+
+    def test_css_is_capped_to_tier_budget(self):
+        design = parse_design_response(
+            "PLACE: bat @ top-right\nCSS:\n" + ("a" * 3000),
+            "medium",
+        )
+
+        self.assertEqual(len(design.css), 2500)
+
+    def test_placements_are_truncated_to_tier_budget(self):
+        response = "\n".join(
+            ["PLACE: bat @ top-right", "PLACE: spider @ top-left",
+             "PLACE: moon @ top-right", "PLACE: cobweb @ top-left"]
+        )
+
+        design = parse_design_response(response, "low")
+
+        self.assertEqual(len(design.placements), 3)
 
     @patch("scripts.spike.urllib.request.urlopen")
     def test_provider_call_uses_openai_chat_completions_shape(self, urlopen):

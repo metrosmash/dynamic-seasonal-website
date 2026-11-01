@@ -5,47 +5,22 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from app.content.decor_catalog import DECORATIONS as DECORATION_CATALOG
+from app.content.decor_catalog import SLOTS_BY_TIER
+from app.content.themes import THEMES as THEME_CATALOG
+from app.content.tiers import TIERS as TIER_CATALOG
 
 TIERS = {
-    "low": {"decorations": 3, "css_chars": 0, "palette": "light"},
-    "medium": {"decorations": 8, "css_chars": 2500, "palette": "dark"},
-    "high": {"decorations": 16, "css_chars": 6000, "palette": "dark"},
+    name: {
+        "decorations": tier["max_decorations"],
+        "css_chars": tier["css_chars"],
+        "palette": tier["palette"],
+    }
+    for name, tier in TIER_CATALOG.items()
 }
-
-DECORATIONS = {
-    "bat": {"top-left", "top-right", "header", "margin-left", "margin-right", "float"},
-    "cobweb": {"top-left", "top-right", "footer"},
-    "pumpkin": {"before-h2", "footer", "margin-left", "margin-right"},
-    "ghost": {"margin-left", "margin-right", "before-h2", "float"},
-    "spider": {"top-left", "top-right", "header"},
-    "moon": {"top-right", "header"},
-    "tombstone": {"footer", "before-h2"},
-    "candle": {"margin-left", "margin-right", "footer"},
-    "crow": {"header", "margin-right"},
-    "bone-divider": {"before-h2"},
-}
-
-THEMES = {
-    "haunted-library",
-    "graveyard-fog",
-    "witchs-kitchen",
-    "pumpkin-patch",
-    "blood-moon",
-    "cobweb-attic",
-    "midnight-carnival",
-    "spooky-forest",
-    "vampire-lounge",
-    "ghost-ship",
-}
-
-ALLOWED_SLOTS = {
-    "low": {"top-left", "top-right", "header"},
-    "medium": {
-        "top-left", "top-right", "header", "before-h2", "footer",
-        "margin-left", "margin-right",
-    },
-    "high": set().union(*DECORATIONS.values()),
-}
+DECORATIONS = {name: item["slots"] for name, item in DECORATION_CATALOG.items()}
+THEMES = set(THEME_CATALOG)
+ALLOWED_SLOTS = SLOTS_BY_TIER
 
 
 class PageSummaryParser(html.parser.HTMLParser):
@@ -111,6 +86,7 @@ def parse_design_response(text: str, tier: str) -> DesignResult:
             line for line in css.splitlines()
             if not re.fullmatch(r"\s*(```|~~~)(?:css)?\s*", line, re.I)
         ).strip()
+        css = css[:budget["css_chars"]]
 
     def unquote(value: str) -> str:
         value = value.strip()
@@ -123,17 +99,15 @@ def parse_design_response(text: str, tier: str) -> DesignResult:
     theme_values = re.findall(r"^\s*THEME:\s*(.*?)\s*$", design_lines, re.I | re.M)
     theme_value = unquote(theme_values[-1]) if theme_values else ""
     if theme_values and not re.fullmatch(r"[a-z0-9-]+", theme_value, re.I):
-        issues.append("invalid theme line")
         theme = None
     else:
         theme = theme_value.lower() if theme_value else None
         if theme and theme not in THEMES:
-            issues.append("unknown theme")
+            theme = None
 
     accent_values = re.findall(r"^\s*ACCENT:\s*(.*?)\s*$", design_lines, re.I | re.M)
     accent_value = unquote(accent_values[-1]) if accent_values else ""
     if accent_values and not re.fullmatch(r"#[0-9a-f]{6}", accent_value, re.I):
-        issues.append("invalid accent line")
         accent = None
     else:
         accent = accent_value.lower() if accent_value else None
@@ -148,21 +122,26 @@ def parse_design_response(text: str, tier: str) -> DesignResult:
             re.I,
         )
         if not match:
-            issues.append("malformed placement")
             continue
         name, slot = match.group(1).lower(), match.group(2).lower()
         slot_name = slot.split(":", 1)[0]
+        if (slot_name == "before-h2") != (":" in slot):
+            continue
+        if slot_name == "before-h2":
+            heading_number = slot.split(":", 1)[1]
+            try:
+                if len(heading_number) > 6 or int(heading_number) < 1:
+                    continue
+            except ValueError:
+                continue
         if name not in DECORATIONS or slot_name not in DECORATIONS[name]:
-            issues.append("unknown decoration or slot")
+            continue
         elif slot_name not in ALLOWED_SLOTS[effective_tier]:
-            issues.append("placement exceeds tier")
+            continue
         else:
             placements.append((name, slot))
 
-    if len(placements) > budget["decorations"]:
-        issues.append("decoration count exceeds tier")
-    if len(css) > budget["css_chars"]:
-        issues.append("CSS exceeds tier budget")
+    placements = placements[:budget["decorations"]]
 
     return DesignResult(theme, accent, tuple(placements), css, tuple(issues))
 

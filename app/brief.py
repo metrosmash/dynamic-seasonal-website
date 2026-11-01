@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.content.themes import THEMES
 from app.parser import ALLOWED_SLOTS, DECORATIONS, TIERS
 
 
-def build_prompt(summary: dict[str, Any], tier: str) -> str:
+def build_prompt(
+    summary: dict[str, Any],
+    tier: str,
+    theme_id: str = "pumpkin-patch",
+) -> str:
     budget = TIERS[tier]
+    theme = THEMES[theme_id]
+    palette = theme.light if budget["palette"] == "light" else theme.dark
     catalog = "\n".join(
         f"- {name}: {', '.join(sorted(slots & ALLOWED_SLOTS[tier]))}"
         for name, slots in sorted(DECORATIONS.items())
@@ -15,8 +22,8 @@ def build_prompt(summary: dict[str, Any], tier: str) -> str:
     headings = "\n".join(
         f"- h{level}: {text}" for level, text in summary["headings"]
     ) or "- (no headings found)"
-    example = """THEME: pumpkin-patch
-ACCENT: #ff7a1a
+    example = f"""THEME: {theme.id}
+ACCENT: {palette.accent}
 PLACE: bat @ top-right"""
     if tier != "low":
         example += """
@@ -37,7 +44,7 @@ h1 { letter-spacing: 0.04em; }"""
     )
     return f"""You choose Halloween decorations for an existing web page. You do not write HTML.
 
-Assigned theme: pumpkin-patch - a warm autumn harvest with pumpkins, candlelight, and gentle spooky details.
+Assigned theme: {theme.id} - {theme.description}.
 Intensity: {tier}
 Palette: {budget['palette']}
 Budget: at most {budget['decorations']} decorations and at most {budget['css_chars']} characters of CSS.
@@ -54,6 +61,7 @@ Headings:
 {headings}
 
 Rules:
+- Repeat the assigned theme exactly; do not choose a different theme.
 - Do not hide, move, resize, or add text to existing content.
 - Use only catalog decorations and allowed slots.
 {before_h2_rule.rstrip()}

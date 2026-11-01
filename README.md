@@ -1,8 +1,8 @@
 # Halloween Website Decorator
 
-The Milestone 1 vertical slice accepts a public website URL, fetches its static HTML, applies a code-controlled Halloween theme and one supported decoration, then displays an isolated preview. The model supplies design suggestions; the app validates and applies them. This slice currently renders one moon or pumpkin in the top-right corner and ignores model-generated CSS until the sanitizer milestone. Remote JavaScript is removed. Pages that require login or JavaScript rendering are not supported yet.
+The app accepts a public website URL, fetches its static HTML, applies a deterministic Halloween theme and validated decorations, then displays an isolated preview. The model supplies decoration placement and an optional accent; the app enforces tier budgets and applies the changes. Ten curated themes have tested light and dark palettes. External page assets may still fail to load, model-generated CSS is not applied until the sanitizer milestone, and remote JavaScript is removed. Pages that require login or JavaScript rendering are not supported yet.
 
-Design-response parsing and HTML summarization live in `app/parser.py`; prompt construction lives in `app/brief.py`. The web app and benchmark script share these modules.
+Design-response parsing and HTML summarization live in `app/parser.py`; prompt construction lives in `app/brief.py`. Theme palettes and seeded selection live in `app/content/themes.py`, intensity budgets in `app/content/tiers.py`, and decoration metadata in `app/content/decor_catalog.py`. Each decoration has a standalone SVG asset in `app/content/decor/`, loaded by the catalog as a package resource. The web app and benchmark script share the design modules.
 
 ## Run locally
 

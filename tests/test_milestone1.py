@@ -8,6 +8,7 @@ from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from app import create_app
+from app.content.themes import select_theme
 from app.pipeline import decorate_page
 from app.providers.openai_compat import complete as complete_openai_compat
 from app.steps.load_page import FetchError, _request_once, load_page
@@ -165,9 +166,39 @@ class HTMLPreparationTests(unittest.TestCase):
         self.assertNotIn("<base", prepared)
         self.assertNotIn("http-equiv=\"refresh\"", prepared)
         self.assertNotIn("javascript:", prepared)
-        self.assertIn('src="https://site.example/path/photo.png"', prepared)
-        self.assertIn('href="https://site.example/path/story"', prepared)
+        self.assertIn('src="https://site.example/assets/photo.png"', prepared)
+        self.assertIn('href="https://site.example/assets/story"', prepared)
         self.assertIn("noopener", prepared)
+
+    def test_rewrites_srcset_and_css_urls_using_base_href(self):
+        page = """<html><head><base href="https://cdn.example/assets/">
+<style>.hero { background-image: url("../images/bg.png"); }
+.icon { background-image: url('//images.example/icon.svg'); }</style></head>
+<body><img srcset="small.png 1x, //cdn.example/large.png 2x">
+<img srcset="data:image/png;base64,abc 1x, large.png 2x">
+<div style="background: url('tile.png')"></div>
+<a href="?view=full">Query</a><a href="#section">Section</a></body></html>"""
+
+        prepared = prepare_html(page, "https://site.example/path/page.html")
+
+        self.assertIn("https://cdn.example/assets/small.png 1x", prepared)
+        self.assertIn("https://cdn.example/large.png 2x", prepared)
+        self.assertIn("data:image/png;base64,abc 1x", prepared)
+        self.assertIn("https://cdn.example/assets/large.png 2x", prepared)
+        self.assertIn("https://cdn.example/images/bg.png", prepared)
+        self.assertIn("https://images.example/icon.svg", prepared)
+        self.assertIn("https://cdn.example/assets/tile.png", prepared)
+        self.assertIn('href="https://cdn.example/assets/?view=full"', prepared)
+        self.assertIn('href="#section"', prepared)
+
+    def test_drops_malformed_url_attributes_without_crashing(self):
+        prepared = prepare_html(
+            '<html><body><h1>Readable</h1><a href="http://[invalid">Broken</a></body></html>',
+            "https://site.example/",
+        )
+
+        self.assertIn("Broken", prepared)
+        self.assertNotIn("href=", prepared)
 
 
 class FlaskSliceTests(unittest.TestCase):
@@ -240,14 +271,15 @@ class PipelineTests(unittest.TestCase):
             model_timeout=1,
         )
 
-        self.assertEqual(result["theme"], "pumpkin-patch")
+        self.assertEqual(result["theme"], select_theme("https://example.com/", "medium").id)
         self.assertEqual(result["design_mode"], "sample provider")
         self.assertIn("var(--hw-bg)", result["html"])
         self.assertIn('data-hw-slot="top-right"', result["html"])
-        self.assertIn("Halloween preview", result["html"])
+        self.assertIn('data-hw-added="banner"', result["html"])
+        self.assertIn("Decorated version of", result["html"])
 
     @patch("app.pipeline.fake.complete")
-    def test_unimplemented_model_placements_are_not_applied(self, complete):
+    def test_valid_model_placements_are_applied(self, complete):
         complete.return_value = """THEME: pumpkin-patch
 ACCENT: #ff7a1a
 PLACE: crow @ header
@@ -264,11 +296,9 @@ PLACE: candle @ footer"""
             model_timeout=1,
         )
 
-        self.assertIn('data-hw-slot="top-right"', result["html"])
-        self.assertEqual(result["warning"], (
-            "This first version supports one moon or pumpkin decoration in the top-right corner; "
-            "other model placements are not applied yet."
-        ))
+        self.assertIn('data-hw-slot="header"', result["html"])
+        self.assertIn('data-hw-slot="footer"', result["html"])
+        self.assertEqual(result["warning"], "")
 
     @patch("app.providers.openai_compat.urllib.request.urlopen")
     def test_openai_compatible_provider_sends_configured_bearer_key(self, urlopen):
