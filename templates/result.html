@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halloween preview</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="result-page">
+  <header class="result-header">
+    <div>
+      <p class="eyebrow">Halloween website decorator</p>
+      <h1>Your decorated preview</h1>
+      <p>Theme: <strong>{{ job.theme }}</strong> · Intensity: <strong>{{ job.intensity }}</strong> · {{ job.design_mode }}</p>
+    </div>
+    <a class="back-link" href="{{ url_for('index') }}">Decorate another site</a>
+  </header>
+
+  {% if job.warning %}
+  <div class="notice warning" role="status">{{ job.warning }}</div>
+  {% endif %}
+
+  <nav class="preview-tabs" aria-label="Preview mode">
+    <a class="{{ 'selected' if view == 'decorated' else '' }}" href="{{ url_for('result_page', job_id=job_id, view='decorated') }}">Halloween version</a>
+    <a class="{{ 'selected' if view == 'original' else '' }}" href="{{ url_for('result_page', job_id=job_id, view='original') }}">Original snapshot</a>
+    <a href="{{ job.source_url }}" target="_blank" rel="noopener noreferrer">Open source site</a>
+  </nav>
+
+  <iframe
+    class="preview-frame"
+    title="{{ 'Original' if view == 'original' else 'Halloween-decorated' }} page preview"
+    src="{{ url_for('render_page', job_id=job_id, view=view) }}"
+    sandbox="allow-popups allow-popups-to-escape-sandbox">
+  </iframe>
+</body>
+</html>

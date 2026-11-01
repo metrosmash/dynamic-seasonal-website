@@ -1,0 +1,12 @@
+**/__pycache__/
+*.py[cod]
+halloween_env/
+.venv/
+
+# taking out enviroment variables 
+**.env
+
+# markdown files 
+hackathon_tracks.md
+build-plan-v2.md
+todo.md
