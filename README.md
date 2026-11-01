@@ -20,6 +20,17 @@ python run.py
 
 Open `http://127.0.0.1:5000`. The default provider is `fake`, so the demo works without model credentials. To use the configured OpenAI-compatible provider, set `PROVIDER=openai_compat`, `PROVIDER_BASE_URL`, and `MODEL_NAME` in your local `.env`; set `PROVIDER_API_KEY` there or enter a per-request primary key in the form. An optional secondary OpenAI-compatible endpoint is enabled with `FALLBACK_PROVIDER=openai_compat`, `FALLBACK_PROVIDER_BASE_URL`, `FALLBACK_MODEL_NAME`, and optionally `FALLBACK_PROVIDER_API_KEY`. Set `FALLBACK_PROVIDER=fake` to skip a second LLM and use the built-in fake provider immediately after the primary fails. Otherwise, if both configured LLMs fail or return unusable design output, the app tries the deterministic built-in fake provider from the earlier implementation, followed by code-only design as the final safety net. The secondary LLM key is server-configured, never submitted by the browser, and both provider credential fingerprints are hashed in cache keys. Never commit `.env`.
 
+## Run with Docker
+
+Build and run the container from the repository root:
+
+```powershell
+docker build -t halloween-theme-cloner .
+docker run --rm -p 10000:10000 -e PROVIDER=fake halloween-theme-cloner
+```
+
+Open `http://localhost:10000`. To configure providers, pass the required settings with `-e` options, or use `--env-file .env` for local development. The Docker build excludes `.env`; credentials are supplied only at runtime. The image runs Gunicorn as a non-root user with one worker because jobs, rate limits, and cache are process-local. For Render, use `docker build` as the environment and `10000` as the exposed port; set provider secrets in Render's environment settings rather than in the image.
+
 ## Fetching and preview safety
 
 - Only HTTP(S) pages on ports 80 or 443 are accepted.
