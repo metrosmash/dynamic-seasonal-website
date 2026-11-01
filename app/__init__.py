@@ -176,12 +176,20 @@ def create_app(test_config: dict | None = None) -> Flask:
                 provider = app.config["PROVIDER"]
                 provider_base_url = app.config["PROVIDER_BASE_URL"]
                 model_name = app.config["MODEL_NAME"]
+                fallback_provider = app.config["FALLBACK_PROVIDER"]
+                fallback_base_url = app.config["FALLBACK_PROVIDER_BASE_URL"]
+                fallback_model_name = app.config["FALLBACK_MODEL_NAME"]
                 api_key_fingerprint = hashlib.sha256(
                     provider_api_key.encode("utf-8")
                 ).hexdigest()
+                fallback_api_key = app.config["FALLBACK_PROVIDER_API_KEY"]
+                fallback_api_key_fingerprint = hashlib.sha256(
+                    fallback_api_key.encode("utf-8")
+                ).hexdigest()
                 cache_key = (
                     source_key, intensity, provider, model_name, provider_base_url,
-                    api_key_fingerprint, variant,
+                    api_key_fingerprint, fallback_provider, fallback_model_name,
+                    fallback_base_url, fallback_api_key_fingerprint, variant,
                 )
                 cache = app.config["RESULT_CACHE"]
                 result = None
@@ -205,9 +213,22 @@ def create_app(test_config: dict | None = None) -> Flask:
                         provider_base_url=provider_base_url,
                         provider_api_key=provider_api_key,
                         model_name=model_name,
+                        fallback_provider=fallback_provider,
+                        fallback_provider_base_url=fallback_base_url,
+                        fallback_provider_api_key=fallback_api_key,
+                        fallback_model_name=fallback_model_name,
                         model_timeout=max(
                             1,
-                            min(app.config["MODEL_TIMEOUT_S"], ensure_time() // 2),
+                            min(
+                                app.config["MODEL_TIMEOUT_S"],
+                                ensure_time()
+                                // (
+                                    4
+                                    if provider == "openai_compat"
+                                    and fallback_provider != "none"
+                                    else 2
+                                ),
+                            ),
                         ),
                         variant=variant,
                         source_id=source_key,

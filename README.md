@@ -18,7 +18,7 @@ Copy-Item .env.example .env
 python run.py
 ```
 
-Open `http://127.0.0.1:5000`. The default provider is `fake`, so the demo works without model credentials. To use the configured OpenAI-compatible provider, set `PROVIDER=openai_compat`, `PROVIDER_BASE_URL`, and `MODEL_NAME` in your local `.env`; set `PROVIDER_API_KEY` there or enter a per-request key in the form. Never commit `.env`.
+Open `http://127.0.0.1:5000`. The default provider is `fake`, so the demo works without model credentials. To use the configured OpenAI-compatible provider, set `PROVIDER=openai_compat`, `PROVIDER_BASE_URL`, and `MODEL_NAME` in your local `.env`; set `PROVIDER_API_KEY` there or enter a per-request primary key in the form. An optional secondary OpenAI-compatible endpoint is enabled with `FALLBACK_PROVIDER=openai_compat`, `FALLBACK_PROVIDER_BASE_URL`, `FALLBACK_MODEL_NAME`, and optionally `FALLBACK_PROVIDER_API_KEY`. Set `FALLBACK_PROVIDER=fake` to skip a second LLM and use the built-in fake provider immediately after the primary fails. Otherwise, if both configured LLMs fail or return unusable design output, the app tries the deterministic built-in fake provider from the earlier implementation, followed by code-only design as the final safety net. The secondary LLM key is server-configured, never submitted by the browser, and both provider credential fingerprints are hashed in cache keys. Never commit `.env`.
 
 ## Fetching and preview safety
 
@@ -34,3 +34,19 @@ Open `http://127.0.0.1:5000`. The default provider is `fake`, so the demo works 
 python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
+
+## Milestone 5: matrix and demo
+
+Run the local fixture/tier matrix with canned fake-provider outputs:
+
+```powershell
+python scripts/matrix.py --provider fake --output docs/matrix-results.md --json-output docs/matrix-results.json
+```
+
+The matrix checks visible text, links, sanitized model CSS, render security headers, and decoration budgets across five fixtures and all three tiers. Use `python scripts/matrix.py --provider openai_compat --baseline docs/matrix-results.json` for an explicitly requested live-provider comparison. The demo startup script warms three medium-intensity fixture uploads in its in-memory cache before serving:
+
+```powershell
+python scripts/demo.py
+```
+
+See [docs/runbook.md](docs/runbook.md) for the demo sequence, provider/network fallbacks, and manual recording checklist.

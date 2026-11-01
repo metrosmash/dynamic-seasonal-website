@@ -1,0 +1,7 @@
+THEME: haunted-library
+ACCENT: #ffc857
+PLACE: moon @ header
+PLACE: candle @ footer
+PLACE: bone-divider @ before-h2:1
+CSS:
+.hw-matrix-safety-probe { color: #ffc857; display: none; visibility: hidden; }

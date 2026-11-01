@@ -1,0 +1,3 @@
+THEME: pumpkin-patch
+ACCENT: #ff7a1a
+PLACE: bat @ header
