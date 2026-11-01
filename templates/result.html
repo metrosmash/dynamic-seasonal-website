@@ -23,7 +23,9 @@
   <nav class="preview-tabs" aria-label="Preview mode">
     <a class="{{ 'selected' if view == 'decorated' else '' }}" href="{{ url_for('result_page', job_id=job_id, view='decorated') }}">Halloween version</a>
     <a class="{{ 'selected' if view == 'original' else '' }}" href="{{ url_for('result_page', job_id=job_id, view='original') }}">Original snapshot</a>
+    {% if job.source_url %}
     <a href="{{ job.source_url }}" target="_blank" rel="noopener noreferrer">Open source site</a>
+    {% endif %}
   </nav>
 
   <iframe

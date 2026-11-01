@@ -290,13 +290,15 @@ def assemble_page(
         "class": "hw-added hw-attribution",
         "data-hw-added": "attribution",
     })
-    attribution.append("Decorated version of ")
-    source_link = soup.new_tag("a", href=source_url, target="_blank", rel="noopener noreferrer")
-    source_link.string = source_url
-    attribution.append(source_link)
-    if (urlsplit(source_url).hostname or "").lower().endswith(".wikipedia.org") or (
-        (urlsplit(source_url).hostname or "").lower() == "wikipedia.org"
-    ):
+    if source_url:
+        attribution.append("Decorated version of ")
+        source_link = soup.new_tag("a", href=source_url, target="_blank", rel="noopener noreferrer")
+        source_link.string = source_url
+        attribution.append(source_link)
+    else:
+        attribution.string = "Decorated version of uploaded website files."
+    source_host = (urlsplit(source_url).hostname or "").lower()
+    if source_host.endswith(".wikipedia.org") or source_host == "wikipedia.org":
         attribution.append(" · Wikipedia content is available under ")
         license_link = soup.new_tag(
             "a",

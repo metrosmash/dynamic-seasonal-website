@@ -4,6 +4,8 @@ The app accepts a public website URL, fetches its static HTML, applies a determi
 
 Design-response parsing and HTML summarization live in `app/parser.py`; prompt construction lives in `app/brief.py`. Theme palettes and seeded selection live in `app/content/themes.py`, intensity budgets in `app/content/tiers.py`, and decoration metadata in `app/content/decor_catalog.py`. Each decoration has a standalone SVG asset in `app/content/decor/`, loaded by the catalog as a package resource. The web app and benchmark script share the design modules.
 
+The homepage also accepts one `.html`/`.htm` file with optional CSS and PNG, JPG, GIF, or WebP assets. Matching stylesheet and image filenames are embedded into the preview; referenced files that are not uploaded are reported as warnings. Uploads are limited by `MAX_UPLOAD_HTML_BYTES`, `MAX_UPLOAD_TOTAL_BYTES`, and `MAX_UPLOAD_FILES`. Repeated identical uploads reuse a bounded in-memory result cache; the cache is cleared when the server restarts.
+
 ## Run locally
 
 ```powershell

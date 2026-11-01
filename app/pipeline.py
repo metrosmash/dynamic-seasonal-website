@@ -20,9 +20,10 @@ def decorate_page(
     model_name: str,
     model_timeout: int,
     variant: int = 0,
+    source_id: str | None = None,
 ) -> dict[str, str]:
     summary = summarize_html(source_html)
-    theme = select_theme(source_url, intensity, variant)
+    theme = select_theme(source_id or source_url, intensity, variant)
     prompt = build_prompt(summary, intensity, theme.id)
     warning = ""
     design_mode = "AI design"

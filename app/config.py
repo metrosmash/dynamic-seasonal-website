@@ -33,4 +33,8 @@ def load_config(root: Path) -> dict[str, object]:
         "FETCH_TIMEOUT_S": _positive_int("FETCH_TIMEOUT_S", 12),
         "MAX_PAGE_BYTES": _positive_int("MAX_PAGE_BYTES", 3 * 1024 * 1024),
         "MAX_REDIRECTS": _positive_int("MAX_REDIRECTS", 5),
+        "MAX_UPLOAD_HTML_BYTES": _positive_int("MAX_UPLOAD_HTML_BYTES", 2 * 1024 * 1024),
+        "MAX_UPLOAD_TOTAL_BYTES": _positive_int("MAX_UPLOAD_TOTAL_BYTES", 8 * 1024 * 1024),
+        "UPLOAD_CACHE_MAX_BYTES": _positive_int("UPLOAD_CACHE_MAX_BYTES", 16 * 1024 * 1024),
+        "MAX_UPLOAD_FILES": _positive_int("MAX_UPLOAD_FILES", 32),
     }

@@ -10,15 +10,20 @@
   <main class="panel">
     <p class="eyebrow">A seasonal site makeover</p>
     <h1>Give a website a little Halloween spirit.</h1>
-    <p class="intro">Enter a public website URL and preview a Halloween-decorated snapshot. Simple pages work best; login-required and JavaScript-heavy sites may not render completely.</p>
+    <p class="intro">Enter a public website URL or upload an HTML page with its CSS and images to preview a Halloween-decorated snapshot. Simple pages work best; login-required and JavaScript-heavy sites may not render completely.</p>
 
     {% if error %}
     <div class="notice error" role="alert">{{ error }}</div>
     {% endif %}
 
-    <form action="{{ url_for('decorate') }}" method="post">
-      <label for="url">Public website URL</label>
-      <input id="url" name="url" type="url" value="{{ submitted_url }}" placeholder="https://example.com" required>
+    <form action="{{ url_for('decorate') }}" method="post" enctype="multipart/form-data">
+      <label for="url">Public website URL (optional if uploading HTML)</label>
+      <input id="url" name="url" type="url" value="{{ submitted_url }}" placeholder="https://example.com">
+      <label for="html_file">HTML file</label>
+      <input id="html_file" name="html_file" type="file" accept=".html,.htm,text/html">
+      <label for="assets">Related CSS and image files (optional)</label>
+      <input id="assets" name="assets" type="file" accept=".css,.png,.jpg,.jpeg,.gif,.webp" multiple>
+      <p class="fine-print">Upload any CSS or images referenced by the HTML. Supported images: PNG, JPG, GIF, and WebP.</p>
       <label for="intensity">Decoration intensity</label>
       <select id="intensity" name="intensity">
         <option value="low">Low - subtle autumn accents</option>
@@ -28,7 +33,7 @@
       <button type="submit">Decorate website</button>
     </form>
 
-    <p class="fine-print">Only public HTTP and HTTPS sites on standard web ports are accepted. Pages are fetched as static HTML; scripts are removed and previewed in an isolated frame. Images and other external assets may not load, so the preview may not be an exact copy of the original site.</p>
+    <p class="fine-print">Only public HTTP and HTTPS sites on standard web ports are accepted. URL pages are fetched as static HTML; scripts are removed and previews are isolated. Uploading referenced CSS and images helps preserve the original look, but missing assets may not load, so the preview may not be an exact copy.</p>
   </main>
 </body>
 </html>
