@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-hidden="true" focusable="false" fill="currentColor">
-  <path d="M50 0v27M30 34 15 22M27 44 8 42M30 54 14 67M70 34l15-12M73 44l19-2M70 54l16 13" fill="none" stroke="currentColor" stroke-width="4"/>
-  <circle cx="50" cy="47" r="20"/>
-  <circle class="hw-cut" cx="43" cy="43" r="3"/>
-  <circle class="hw-cut" cx="57" cy="43" r="3"/>
-</svg>

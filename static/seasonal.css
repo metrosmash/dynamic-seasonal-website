@@ -43,11 +43,6 @@ body {
   margin: 0.25rem 0 0;
 }
 
-.back-link {
-  color: #10312b;
-  font-weight: bold;
-}
-
 .demo-main {
   max-width: 60rem;
   margin: 0 auto;

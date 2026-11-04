@@ -5,10 +5,8 @@ import time
 import urllib.error
 import urllib.request
 
-from app.steps.load_page import FetchError
 
-
-class ProviderError(FetchError):
+class ProviderError(Exception):
     def __init__(self, message: str, *, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
@@ -27,6 +25,7 @@ def complete(
     max_tokens: int,
     timeout_s: int,
 ) -> str:
+    """Call an OpenAI-compatible chat-completions endpoint and return the text."""
     if not base_url or not model:
         raise ValueError("OpenAI-compatible provider requires PROVIDER_BASE_URL and MODEL_NAME.")
     endpoint = base_url.rstrip("/")
@@ -46,7 +45,7 @@ def complete(
     for attempt in range(MAX_RETRIES + 1):
         remaining = request_deadline - time.monotonic()
         if remaining <= 0:
-            raise FetchError("AI provider could not be reached before the timeout.")
+            raise ProviderError("AI provider could not be reached before the timeout.")
         try:
             with urllib.request.urlopen(request, timeout=remaining) as response:
                 payload = json.loads(response.read(1024 * 1024).decode("utf-8"))
@@ -72,15 +71,15 @@ def complete(
                 status_code=exc.code,
             ) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
-            raise FetchError("AI provider could not be reached before the timeout.") from exc
+            raise ProviderError("AI provider could not be reached before the timeout.") from exc
         except json.JSONDecodeError as exc:
-            raise FetchError("AI provider returned an invalid response.") from exc
+            raise ProviderError("AI provider returned an invalid response.") from exc
     else:
-        raise FetchError("AI provider did not return a response.")
+        raise ProviderError("AI provider did not return a response.")
     try:
         content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise FetchError("AI provider response did not contain a chat completion.") from exc
+        raise ProviderError("AI provider response did not contain a chat completion.") from exc
     if not isinstance(content, str):
-        raise FetchError("AI provider returned non-text content.")
+        raise ProviderError("AI provider returned non-text content.")
     return content

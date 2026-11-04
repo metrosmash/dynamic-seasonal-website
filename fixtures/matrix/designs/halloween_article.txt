@@ -1,8 +1,0 @@
-THEME: pumpkin-patch
-ACCENT: #ff7a1a
-PLACE: bat @ header
-PLACE: pumpkin @ before-h2:1
-PLACE: cobweb @ footer
-PLACE: ghost @ float
-CSS:
-.hw-matrix-safety-probe { color: #ff7a1a; display: none; visibility: hidden; }

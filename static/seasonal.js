@@ -60,7 +60,7 @@
 
   function reloadPreview() {
     if (frame) {
-      frame.src = "/seasonal/preview?v=" + Date.now();
+      frame.src = "/preview?v=" + Date.now();
     }
   }
 
@@ -79,7 +79,7 @@
   function applySeason(season) {
     setBusy(true);
     render("Asking the agent to redesign the site for " + season + "…", false);
-    post("/seasonal/api/redesign", { season: season }).then(function (result) {
+    post("/api/redesign", { season: season }).then(function (result) {
       if (result.ok) {
         state = result.payload;
         reloadPreview();
@@ -117,7 +117,7 @@
   if (resetButton) {
     resetButton.addEventListener("click", function () {
       setBusy(true);
-      post("/seasonal/api/reset", null).then(function (result) {
+      post("/api/reset", null).then(function (result) {
         if (result.ok) {
           state = result.payload;
           reloadPreview();
@@ -153,10 +153,10 @@
   }
 
   if (backButton) {
-    backButton.addEventListener("click", function () { step("/seasonal/api/back"); });
+    backButton.addEventListener("click", function () { step("/api/back"); });
   }
   if (forwardButton) {
-    forwardButton.addEventListener("click", function () { step("/seasonal/api/forward"); });
+    forwardButton.addEventListener("click", function () { step("/api/forward"); });
   }
 
   render("", false);

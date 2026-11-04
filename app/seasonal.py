@@ -18,10 +18,10 @@ import threading
 from pathlib import Path
 
 import tinycss2
-from flask import current_app, jsonify, render_template, request
+from flask import current_app, jsonify, redirect, render_template, request
 from tinycss2.ast import AtRule, Declaration, QualifiedRule
 
-from app.providers import openai_compat
+from app import llm
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1006,7 +1006,7 @@ def call_llm_agent(season: str, current: dict[str, str], config: dict) -> dict[s
     last_error = "unknown error"
     for base_url, api_key, model in attempts:
         try:
-            reply = openai_compat.complete(
+            reply = llm.complete(
                 prompt,
                 base_url=base_url,
                 api_key=api_key,
@@ -1095,7 +1095,7 @@ def _consume_limit() -> tuple[bool, int]:
 
 
 def register_seasonal(app) -> None:
-    @app.get("/seasonal")
+    @app.get("/")
     def seasonal_page():
         return render_template(
             "seasonal.html",
@@ -1104,7 +1104,11 @@ def register_seasonal(app) -> None:
             state=summarize(app.config),
         )
 
-    @app.get("/seasonal/preview")
+    @app.get("/seasonal")
+    def seasonal_legacy():
+        return redirect("/", code=302)
+
+    @app.get("/preview")
     def seasonal_preview():
         files = current_entry(app.config)["files"]
         response = app.response_class(
@@ -1118,7 +1122,7 @@ def register_seasonal(app) -> None:
         )
         return response
 
-    @app.get("/seasonal/api/state")
+    @app.get("/api/state")
     def seasonal_state():
         return jsonify(summarize(app.config))
 
@@ -1129,7 +1133,7 @@ def register_seasonal(app) -> None:
             season = request.form.get("season", "")
         return season.strip()
 
-    @app.post("/seasonal/api/redesign")
+    @app.post("/api/redesign")
     def seasonal_redesign():
         allowed, retry_after = _consume_limit()
         if not allowed:
@@ -1149,14 +1153,14 @@ def register_seasonal(app) -> None:
         state["warning"] = warning
         return jsonify(state)
 
-    @app.post("/seasonal/api/reset")
+    @app.post("/api/reset")
     def seasonal_reset():
         return jsonify(reset_to_original(app.config))
 
-    @app.post("/seasonal/api/back")
+    @app.post("/api/back")
     def seasonal_back():
         return jsonify(step(app.config, -1))
 
-    @app.post("/seasonal/api/forward")
+    @app.post("/api/forward")
     def seasonal_forward():
         return jsonify(step(app.config, 1))

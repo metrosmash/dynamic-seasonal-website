@@ -1,8 +1,0 @@
-THEME: witchs-kitchen
-ACCENT: #a4d65e
-PLACE: crow @ header
-PLACE: pumpkin @ footer
-PLACE: bat @ margin-left
-PLACE: ghost @ float
-CSS:
-.hw-matrix-safety-probe { color: #a4d65e; display: none; visibility: hidden; }

@@ -1,123 +1,233 @@
-/* Original Sample Café styles (placeholder demo site). */
+/* Eid al-Fitr (Sallah) thematic redesign stylesheet */
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.6;
-  color: #222222;
-  background: #f7f3ea;
+  color: #26221d;
+  background: #fbf9f4;
 }
 
 .site-header {
-  background: #2f4a3c;
-  color: #ffffff;
+  background: linear-gradient(135deg, #134e38 0%, #1d6f51 100%);
+  color: #fbf9f4;
   padding: 1rem 1.25rem;
+  border-bottom: 4px solid #d4af37;
+  box-shadow: 0 4px 12px rgba(19, 78, 56, 0.15);
+}
+
+.header-inner {
+  max-width: 48rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (min-width: 36rem) {
+  .header-inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 .brand {
-  margin: 0 0 0.5rem;
-  font-size: 1.4rem;
-  font-weight: bold;
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #fefcf7;
 }
 
 .site-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  gap: 0.5rem 1.25rem;
 }
 
 .site-nav a {
-  color: #ffffff;
+  color: #f7f3ea;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.site-nav a:hover,
+.site-nav a:focus {
+  color: #f3d16b;
+  outline: none;
 }
 
 main {
   max-width: 46rem;
   margin: 0 auto;
-  padding: 1.25rem;
+  padding: 1.5rem 1.25rem;
 }
 
 .hero {
-  background: #ffffff;
-  border: 2px solid #2f4a3c;
-  border-radius: 10px;
-  padding: 1.5rem;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f9f7 100%);
+  border: 2px solid #d4af37;
+  border-radius: 14px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(212, 175, 55, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.crescent-decor {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  animation: floatDecor 3s ease-in-out infinite alternate;
+}
+
+@keyframes floatDecor {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-4px); }
 }
 
 .season-kicker {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.5rem;
   font-size: 0.95rem;
-  color: #3d3d3d;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #997412;
 }
 
 h1 {
-  margin: 0 0 0.5rem;
-  font-size: 2rem;
+  margin: 0 0 0.75rem;
+  font-size: 2.2rem;
+  color: #114230;
+  font-weight: 800;
+}
+
+.hero p {
+  margin: 0 auto 1.5rem;
+  max-width: 38rem;
+  color: #3b3630;
 }
 
 .panel {
   background: #ffffff;
-  border: 1px solid #c9c2b2;
-  border-radius: 10px;
-  padding: 1.25rem;
-  margin-top: 1rem;
+  border: 1px solid #e1dacb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.panel h2 {
+  margin-top: 0;
+  color: #134e38;
+  font-size: 1.5rem;
+  border-bottom: 2px solid #f3eedd;
+  padding-bottom: 0.5rem;
 }
 
 .menu-list {
   padding-left: 1.25rem;
+  margin-bottom: 0;
+}
+
+.menu-list li {
+  margin-bottom: 0.75rem;
+  color: #3b3630;
+}
+
+.menu-list strong {
+  color: #114230;
 }
 
 .button,
 button {
   display: inline-block;
-  background: #2f4a3c;
+  background: #134e38;
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 0.6rem 1rem;
+  padding: 0.7rem 1.25rem;
   font-size: 1rem;
+  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:hover,
+button:hover,
+.button:focus,
+button:focus {
+  background: #1d6f51;
+  outline: none;
+}
+
+.button:active,
+button:active {
+  transform: scale(0.98);
 }
 
 label {
   display: block;
-  margin-top: 0.75rem;
-  font-weight: bold;
+  margin-top: 1rem;
+  font-weight: 700;
+  color: #26221d;
+  font-size: 0.95rem;
 }
 
 input,
 textarea {
   display: block;
   width: 100%;
-  max-width: 28rem;
-  margin-top: 0.25rem;
-  padding: 0.5rem;
+  max-width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.65rem;
   font: inherit;
-  border: 1px solid #8a8578;
-  border-radius: 6px;
+  border: 1px solid #b3a896;
+  border-radius: 8px;
   background: #ffffff;
-  color: #222222;
+  color: #26221d;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: #134e38;
+  box-shadow: 0 0 0 3px rgba(19, 78, 56, 0.15);
 }
 
 form button {
+  margin-top: 1.25rem;
+}
+
+#contact-note {
   margin-top: 1rem;
+  font-weight: 600;
+  color: #134e38;
 }
 
 .site-footer {
   text-align: center;
-  padding: 1.5rem 1rem 2rem;
-  color: #3d3d3d;
+  padding: 2rem 1rem 2.5rem;
+  color: #5c5347;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 36rem) {
   h1 {
-    font-size: 1.6rem;
+    font-size: 1.75rem;
   }
 
   main {
-    padding: 0.75rem;
+    padding: 1rem 0.75rem;
+  }
+
+  .hero {
+    padding: 1.5rem 1rem;
   }
 }
