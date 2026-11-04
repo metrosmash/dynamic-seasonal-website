@@ -45,6 +45,9 @@ def test_page_has_banner_toggles_reset_and_history_controls(client):
     for preset in ("Christmas", "Halloween", "Workers", "Children", "Eid al-Fitr (Sallah)"):
         assert preset in page
     assert "Enter your own season" in page
+    assert "Imagine a website that redesigns itself for each season" in page
+    normalized = " ".join(page.split())
+    assert "automatically redesigns itself for that occasion" in normalized
     assert "Reset to original" in page
     assert 'id="back-button"' in page
     assert 'id="forward-button"' in page

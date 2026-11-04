@@ -150,6 +150,32 @@ button.danger:hover:not(:disabled) {
   margin: 1.25rem 0 0.5rem;
 }
 
+.about {
+  background: #ffffff;
+  border: 1px solid #c9c5b8;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.about h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.about h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 1rem;
+}
+
+.about p {
+  margin: 0 0 0.5rem;
+}
+
+.about p:last-child {
+  margin-bottom: 0;
+}
+
 .preview {
   display: block;
   width: 100%;

@@ -47,6 +47,26 @@
       <iframe id="preview" class="preview" title="Seasonal Sample Café preview"
               src="{{ url_for('seasonal_preview') }}" sandbox="allow-scripts allow-forms"></iframe>
     </section>
+
+    <section class="about" aria-label="About this demo">
+      <h2>What is this?</h2>
+      <p>Imagine a website that redesigns itself for each season — that is this web
+        application. Below is a fictional Sample Café site with Home, Menu, About, and
+        Contact sections, all placeholder content. Pick a season and an agent restyles it:
+        colors, typography, layout, decorations, and the tone of the copy.</p>
+      <h3>How it works</h3>
+      <p>Each toggle sends the season name plus the site's current HTML, CSS, and JavaScript
+        to the agent with one instruction: redesign for that season while keeping the
+        navigation, all four sections, and the contact form working. The returned files are
+        checked for valid syntax and structure, then replace the current version. The last
+        few versions are kept so you can step back, and Reset restores the preserved
+        original.</p>
+      <h3>From toggles to calendar</h3>
+      <p>When an occasion logged in the website's calendar arrives, the website automatically
+        redesigns itself for that occasion — for example, Christmas styling going live on
+        December 1 with nobody clicking anything. This demo stands in for that calendar with
+        the toggle buttons above.</p>
+    </section>
   </main>
 
   <script id="seasonal-state" type="application/json">{{ state | tojson }}</script>

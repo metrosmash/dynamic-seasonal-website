@@ -29,6 +29,27 @@ python run.py
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). The default `fake` provider uses a
 built-in designer, so the demo works with no API key.
 
+## How to test the demo
+
+Click-through walkthrough (no API key needed):
+
+1. Start the app with `python run.py` and open [http://127.0.0.1:5000](http://127.0.0.1:5000).
+2. Confirm the proof-of-concept banner is visible at the top of the page.
+3. Click **Christmas**: the café preview restyles (colors, decorations, seasonal copy)
+   while Home, Menu, About, and Contact keep working.
+4. Click **Halloween**: it replaces the Christmas version — only one season is active
+   at a time.
+5. Type your own occasion (e.g. `Cherry Blossom Festival`) in "Enter your own season"
+   and click **Apply**.
+6. Click **Back** / **Forward** to step through the recent versions.
+7. Submit the café's contact form inside the preview: it shows a sample-only note and
+   sends nothing.
+8. Click **Reset to original**: the untouched Sample Café returns.
+9. Shrink the browser to phone width: the controls and preview stay usable.
+
+To exercise the live-agent path instead of the built-in designer, set `PROVIDER=openai_compat`
+with your base URL, model, and key in `.env`, restart, and repeat steps 3–5.
+
 ## How it works
 
 Each toggle sends the season name plus the current site source
