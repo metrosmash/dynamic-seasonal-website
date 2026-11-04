@@ -1,0 +1,178 @@
+/* Shell styles for the seasonal redesign demo page (not the café site). */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+  color: #1d1d1b;
+  background: #eceae4;
+}
+
+.poc-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 0.65rem 1rem;
+  background: #10312b;
+  color: #ffffff;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.demo-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 1.25rem 0;
+  max-width: 60rem;
+  margin: 0 auto;
+}
+
+.demo-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.demo-sub {
+  margin: 0.25rem 0 0;
+}
+
+.back-link {
+  color: #10312b;
+  font-weight: bold;
+}
+
+.demo-main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2rem;
+}
+
+.controls {
+  background: #ffffff;
+  border: 1px solid #c9c5b8;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+}
+
+.controls h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid #10312b;
+  background: #ffffff;
+  color: #10312b;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #e3efe9;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+button.active {
+  background: #10312b;
+  color: #ffffff;
+}
+
+button.danger {
+  border-color: #8f1d22;
+  color: #8f1d22;
+}
+
+button.danger:hover:not(:disabled) {
+  background: #f6e3e3;
+}
+
+.custom-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.custom-row label {
+  font-weight: bold;
+}
+
+.custom-row input {
+  flex: 1 1 14rem;
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid #6f6a5e;
+  border-radius: 6px;
+  color: #1d1d1b;
+  background: #ffffff;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.status {
+  margin: 0.75rem 0 0;
+  min-height: 1.5em;
+}
+
+.status.error {
+  color: #8f1d22;
+  font-weight: bold;
+}
+
+.history-line {
+  margin: 0.25rem 0 0;
+  font-size: 0.92rem;
+  color: #44423c;
+}
+
+.preview-heading {
+  font-size: 1.1rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  min-height: 26rem;
+  border: 1px solid #8a8578;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+@media (max-width: 36rem) {
+  .demo-header,
+  .demo-main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .preview {
+    height: 75vh;
+  }
+}

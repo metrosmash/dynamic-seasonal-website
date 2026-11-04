@@ -113,6 +113,43 @@ The Docker build excludes `.env`. The container runs Gunicorn as a non-root user
 - Jobs, rate limits, and cached results are held in memory. A restart clears them, and running multiple app instances will not share them.
 - This is a prototype, not yet hardened for public multi-user production. Review deployment-specific proxy settings, CSRF protections, monitoring, and shared storage before exposing it publicly.
 
+## Seasonal redesign demo (proof of concept)
+
+A fictional **Sample Café** site (Home, Menu, About, Contact; all placeholder text) that can be
+redesigned per season from toggle buttons. Open it at `/seasonal` after starting the app:
+
+```powershell
+python run.py
+```
+
+Then open [http://127.0.0.1:5000/seasonal](http://127.0.0.1:5000/seasonal) and pick a preset season
+(Christmas, Halloween, Workers' Day, Children's Day, Eid al-Fitr (Sallah)) or type your own.
+Only one season is active at a time; use Back/Forward to step through the last few versions,
+or **Reset to original** to restore the preserved copy in `seasonal/original/`.
+
+This demo uses toggles. A real system would trigger seasonal redesigns from a calendar
+(e.g. automatically on December 1 for Christmas) instead of user clicks.
+
+How it works: each toggle sends the season name plus the current site source
+(`seasonal/site/index.html`, `style.css`, `script.js`) to the agent with the redesign
+instruction in `app/seasonal.py`. With the default `fake`/`none` providers a built-in
+deterministic designer acts as the agent so the demo runs offline; with
+`PROVIDER=openai_compat` (or fallback) configured, the same prompt goes to the
+OpenAI-compatible LLM, which must return the three files as JSON. Returned files are
+validated (HTML structure, CSS syntax, JS syntax) before replacing the current version;
+invalid files keep the previous version and show an error, while an unreachable LLM
+falls back to the built-in designer with a visible warning. The agent can only write the
+three files inside `seasonal/site/`.
+
+Proof-of-concept limitations: the banner/controls live in a shell page outside the
+redesigned files so they survive every season; version history is in-memory (a restart
+clears it); the built-in designer reuses one layout with seasonal palettes/copy rather
+than a fully free redesign; JS validation uses `node --check` when Node is installed and
+a delimiter-balance check otherwise; no real addresses, prices, or contact details exist
+anywhere in the demo content.
+
+Focused tests: `python -m pytest tests/test_seasonal.py -q`.
+
 ## Demo
 
 Run the demo server with the three sample pages pre-warmed in its in-memory cache:

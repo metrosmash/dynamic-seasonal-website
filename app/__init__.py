@@ -21,6 +21,7 @@ from app.harness.local import LocalHarness
 from app.job_pool import BoundedJobPool
 from app.pipeline import decorate_page
 from app.rate_limit import RequestLimiter
+from app.seasonal import register_seasonal
 from app.steps.load_page import FetchError, load_page
 from app.steps.inline_upload import UploadError, inline_upload, safe_filename, unpack_upload_zip
 from app.steps.prepare_html import prepare_html
@@ -86,13 +87,22 @@ def create_app(test_config: dict | None = None) -> Flask:
     def add_app_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        if request.endpoint != "render_page":
+        if request.endpoint in {"render_page", "seasonal_preview"}:
+            return response
+        if request.endpoint == "seasonal_page":
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; style-src 'self'; img-src 'self' data:; "
-                "script-src 'none'; object-src 'none'; base-uri 'none'; "
-                "frame-ancestors 'self'",
+                "script-src 'self'; frame-src 'self'; object-src 'none'; "
+                "base-uri 'none'; frame-ancestors 'self'",
             )
+            return response
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "script-src 'none'; object-src 'none'; base-uri 'none'; "
+            "frame-ancestors 'self'",
+        )
         return response
 
     @app.get("/")
@@ -768,5 +778,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/health")
     def health():
         return jsonify(status="ok")
+
+    register_seasonal(app)
 
     return app
