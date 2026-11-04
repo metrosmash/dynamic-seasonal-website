@@ -38,13 +38,33 @@
     {% if job.source_url %}
     <a href="{{ job.source_url }}" target="_blank" rel="noopener noreferrer">Open source site</a>
     {% endif %}
+    <a href="{{ url_for('download', job_id=job_id) }}">Download page</a>
   </nav>
 
+  {% if job.mode == 'agent' %}
+  <p class="agent-meta">Harness: <strong>{{ job.harness }}</strong>
+  {% if job.live_view_url %} · <a href="{{ job.live_view_url }}" target="_blank" rel="noopener noreferrer">Open live browser view</a>{% endif %}</p>
+  {% if job.instruction %}<p class="agent-meta">Request: {{ job.instruction }}</p>{% endif %}
+  {% if job.agent_iterations %}
+  <ol class="agent-timeline">
+    {% for item in job.agent_iterations %}
+    <li>Turn {{ loop.index }}: {{ item.applied|join(', ') or 'no edits' }}{% if item.note %} — {{ item.note }}{% endif %}{% if item.done %} (done){% endif %}</li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  <form action="{{ url_for('agent_message', job_id=job_id) }}" method="post" class="chat-form">
+    <label for="message">Ask the agent for changes</label>
+    <input id="message" name="message" maxlength="2000" placeholder="e.g. add a ghost near the footer" autocomplete="off">
+    <button type="submit">Send to agent</button>
+  </form>
+  {% else %}
   <form action="{{ url_for('regenerate', job_id=job_id) }}" method="post" class="regenerate-form">
     <label for="provider_api_key">Provider API key (optional; used for this request only)</label>
     <input id="provider_api_key" name="provider_api_key" type="password" autocomplete="off">
     <button type="submit">Regenerate design</button>
   </form>
+  {% endif %}
 
   <iframe
     class="preview-frame"

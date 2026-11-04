@@ -31,7 +31,10 @@
         <option value="medium" selected>Medium - Halloween atmosphere</option>
         <option value="high">High - extra spooky</option>
       </select>
+      <label for="instruction">Agent request (optional; used by agent mode)</label>
+      <textarea id="instruction" name="instruction" rows="3" maxlength="2000" placeholder="e.g. more pumpkins near the top, keep it subtle"></textarea>
       <button type="submit">Decorate website</button>
+      <button type="submit" class="secondary" formaction="{{ url_for('agent_start') }}">Decorate with agent</button>
     </form>
 
     <p class="fine-print">Only public HTTP and HTTPS sites on standard web ports are accepted. URL pages are fetched as static HTML; scripts are removed and previews are isolated. Uploading referenced CSS and images helps preserve the original look, but missing assets may not load, so the preview may not be an exact copy.</p>

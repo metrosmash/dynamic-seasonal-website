@@ -65,7 +65,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 3rem;
   padding: 0.7rem 0.85rem;
@@ -74,6 +75,10 @@ select {
   background: #100d12;
   color: #fff7f0;
   font: inherit;
+}
+
+textarea {
+  resize: vertical;
 }
 
 button {
@@ -90,6 +95,36 @@ button {
 
 button:hover {
   background: #ff9a3c;
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid #e87522;
+  color: #ffad63;
+}
+
+button.secondary:hover {
+  background: #3a2418;
+}
+
+.agent-meta {
+  margin: 0 0 0.5rem;
+  color: #d0c4ba;
+}
+
+.agent-meta a {
+  color: #ffad63;
+}
+
+.agent-timeline {
+  margin: 0 0 1rem;
+  padding-left: 1.4rem;
+  color: #d0c4ba;
+  line-height: 1.6;
+}
+
+.chat-form {
+  margin-bottom: 1rem;
 }
 
 .fine-print {

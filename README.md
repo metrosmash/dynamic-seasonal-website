@@ -30,6 +30,8 @@ Choose one input method:
 
 Choose a decoration intensity and submit. The result page lets you compare the decorated page with the original snapshot, and regenerate a variation. Uploaded assets are embedded in the preview when their filenames match references in the HTML or CSS. Unuploaded assets may not load.
 
+For iterative edits, use **Decorate with agent**: the model edits the page over several turns inside a harness (local by default, Browserbase cloud when configured), and the result page offers chat follow-ups plus a download link. See [docs/agent-harness.md](docs/agent-harness.md).
+
 ## AI provider setup
 
 The default provider is `fake`: a deterministic, built-in sample provider. To use an OpenAI-compatible LLM, set these values in your local `.env`:
