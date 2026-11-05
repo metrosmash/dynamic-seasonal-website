@@ -55,6 +55,14 @@ def test_page_has_banner_toggles_reset_and_history_controls(client):
     assert 'id="back-button"' in page
     assert 'id="forward-button"' in page
     assert "/preview" in page
+    assert 'href="/static/favicon.svg"' in page
+
+
+def test_favicon_serves(client):
+    response = client.get("/static/favicon.svg")
+    assert response.status_code == 200
+    assert response.content_type == "image/svg+xml; charset=utf-8"
+    assert b"<svg" in response.data
 
 
 def test_banner_stays_visible_after_redesign(client):
