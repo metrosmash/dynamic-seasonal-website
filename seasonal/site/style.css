@@ -1,0 +1,235 @@
+/* Eid al-Fitr (Sallah) Redesign Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  line-height: 1.6;
+  color: #2b261f;
+  background: #fbf9f4;
+  background-image: radial-gradient(#d4af37 0.75px, transparent 0.75px);
+  background-size: 24px 24px;
+}
+
+.site-header {
+  background: #0f2e21;
+  color: #f7f3ea;
+  padding: 1rem 1.25rem;
+  border-bottom: 3px solid #d4af37;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(15, 46, 33, 0.15);
+}
+
+.header-container {
+  max-width: 50rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 36rem) {
+  .header-container {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.brand {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fceea7;
+  letter-spacing: 0.05em;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+.site-nav a {
+  color: #f7f3ea;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.site-nav a:hover,
+.site-nav a:focus {
+  color: #fceea7;
+  text-decoration: underline;
+}
+
+main {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.hero {
+  background: linear-gradient(135deg, #0f2e21 0%, #174532 100%);
+  color: #f7f3ea;
+  border: 2px solid #d4af37;
+  border-radius: 14px;
+  padding: 2rem 1.5rem;
+  box-shadow: 0 8px 24px rgba(212, 175, 55, 0.2);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.crescent-badge {
+  display: inline-block;
+  background: rgba(212, 175, 55, 0.2);
+  color: #fceea7;
+  border: 1px solid #d4af37;
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  letter-spacing: 0.05em;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: 2.25rem;
+  color: #fceea7;
+  line-height: 1.2;
+}
+
+.hero p {
+  max-width: 38rem;
+  margin: 0 auto 1.5rem;
+  color: #eae3d2;
+  font-size: 1.05rem;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #dfd5c2;
+  border-top: 4px solid #0f2e21;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.panel h2 {
+  margin-top: 0;
+  color: #0f2e21;
+  font-size: 1.6rem;
+  border-bottom: 2px solid #f2eadb;
+  padding-bottom: 0.5rem;
+}
+
+.section-header-decor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.decor-icon {
+  font-size: 1.5rem;
+}
+
+.menu-list {
+  padding-left: 1.25rem;
+}
+
+.menu-list li {
+  margin-bottom: 0.75rem;
+}
+
+.menu-list strong {
+  color: #0f2e21;
+}
+
+.button,
+button {
+  display: inline-block;
+  background: #0f2e21;
+  color: #fceea7;
+  border: 1px solid #d4af37;
+  border-radius: 8px;
+  padding: 0.7rem 1.25rem;
+  font-size: 1rem;
+  font-weight: bold;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.button:hover,
+.button:focus,
+button:hover,
+button:focus {
+  background: #174532;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+label {
+  display: block;
+  margin-top: 1rem;
+  font-weight: bold;
+  color: #0f2e21;
+}
+
+input,
+textarea {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  margin-top: 0.35rem;
+  padding: 0.65rem;
+  font: inherit;
+  border: 1px solid #b3a690;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2b261f;
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid #0f2e21;
+  border-color: #0f2e21;
+}
+
+form button {
+  margin-top: 1.25rem;
+}
+
+#contact-note {
+  margin-top: 1rem;
+  font-weight: bold;
+  color: #0f2e21;
+}
+
+.site-footer {
+  text-align: center;
+  padding: 2rem 1rem 2.5rem;
+  color: #4a4235;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 36rem) {
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  main {
+    padding: 0.75rem;
+  }
+
+  .hero {
+    padding: 1.5rem 1rem;
+  }
+}

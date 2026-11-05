@@ -15,6 +15,7 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 COPY --chown=app:app app ./app
 COPY --chown=app:app static ./static
 COPY --chown=app:app templates ./templates
+COPY --chown=app:app seasonal ./seasonal
 COPY --chown=app:app run.py .
 
 USER app

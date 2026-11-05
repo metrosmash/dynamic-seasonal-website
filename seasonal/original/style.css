@@ -1,0 +1,123 @@
+/* Original Sample Café styles (placeholder demo site). */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.6;
+  color: #222222;
+  background: #f7f3ea;
+}
+
+.site-header {
+  background: #2f4a3c;
+  color: #ffffff;
+  padding: 1rem 1.25rem;
+}
+
+.brand {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+  font-weight: bold;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.site-nav a {
+  color: #ffffff;
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.hero {
+  background: #ffffff;
+  border: 2px solid #2f4a3c;
+  border-radius: 10px;
+  padding: 1.5rem;
+}
+
+.season-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  color: #3d3d3d;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #c9c2b2;
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+
+.menu-list {
+  padding-left: 1.25rem;
+}
+
+.button,
+button {
+  display: inline-block;
+  background: #2f4a3c;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 1rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+label {
+  display: block;
+  margin-top: 0.75rem;
+  font-weight: bold;
+}
+
+input,
+textarea {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  font: inherit;
+  border: 1px solid #8a8578;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #222222;
+}
+
+form button {
+  margin-top: 1rem;
+}
+
+.site-footer {
+  text-align: center;
+  padding: 1.5rem 1rem 2rem;
+  color: #3d3d3d;
+}
+
+@media (max-width: 36rem) {
+  h1 {
+    font-size: 1.6rem;
+  }
+
+  main {
+    padding: 0.75rem;
+  }
+}

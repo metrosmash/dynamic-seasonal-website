@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seasonal redesign demo — Sample Café</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='seasonal.css') }}">
+</head>
+<body>
+  <p class="poc-banner" role="note">{{ banner }}</p>
+
+  <header class="demo-header">
+    <div>
+      <h1>Seasonal redesign demo</h1>
+      <p class="demo-sub">A fictional <strong>Sample Café</strong> site, redesigned per season. All café content is placeholder text.</p>
+    </div>
+  </header>
+
+  <main class="demo-main">
+    <section class="controls" aria-label="Seasonal redesign controls">
+      <h2>Choose a season</h2>
+      <div class="preset-row" role="group" aria-label="Preset seasons">
+        {% for preset in presets %}
+        <button type="button" class="preset" data-season="{{ preset }}">{{ preset }}</button>
+        {% endfor %}
+      </div>
+
+      <form id="custom-form" class="custom-row">
+        <label for="custom-season">Enter your own season</label>
+        <input id="custom-season" name="season" type="text" maxlength="80"
+               placeholder="e.g. Cherry Blossom Festival" autocomplete="off">
+        <button type="submit">Apply</button>
+      </form>
+
+      <div class="action-row">
+        <button type="button" id="reset-button" class="danger">Reset to original</button>
+        <button type="button" id="back-button">Back</button>
+        <button type="button" id="forward-button">Forward</button>
+      </div>
+
+      <div class="edition">
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <p id="history-line" class="history-line"></p>
+      </div>
+    </section>
+
+    <section aria-label="Seasonal site preview">
+      <h2 class="preview-heading">Sample Café preview</h2>
+      <iframe id="preview" class="preview" title="Seasonal Sample Café preview"
+              src="{{ url_for('seasonal_preview') }}" sandbox="allow-scripts allow-forms"></iframe>
+    </section>
+
+    <section class="about" aria-label="About this demo">
+      <h2>What is this?</h2>
+      <p>Imagine a website that redesigns itself for each season — that is this web
+        application. Below is a fictional Sample Café site with Home, Menu, About, and
+        Contact sections, all placeholder content. Pick a season and an agent restyles it:
+        colors, typography, layout, decorations, and the tone of the copy.</p>
+      <h3>How it works</h3>
+      <p>Each toggle sends the season name plus the site's current HTML, CSS, and JavaScript
+        to the agent with one instruction: redesign for that season while keeping the
+        navigation, all four sections, and the contact form working. The returned files are
+        checked for valid syntax and structure, then replace the current version. The last
+        few versions are kept so you can step back, and Reset restores the preserved
+        original.</p>
+      <h3>From toggles to calendar</h3>
+      <p>When an occasion logged in the website's calendar arrives, the website automatically
+        redesigns itself for that occasion — for example, Christmas styling going live on
+        December 1 with nobody clicking anything. This demo stands in for that calendar with
+        the toggle buttons above.</p>
+    </section>
+  </main>
+
+  <script id="seasonal-state" type="application/json">{{ state | tojson }}</script>
+  <script src="{{ url_for('static', filename='seasonal.js') }}"></script>
+</body>
+</html>

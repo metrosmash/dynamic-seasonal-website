@@ -1,8 +1,0 @@
-THEME: midnight-carnival
-ACCENT: #d78cff
-PLACE: spider @ header
-PLACE: ghost @ before-h2:1
-PLACE: candle @ footer
-PLACE: bat @ float
-CSS:
-.hw-matrix-safety-probe { color: #d78cff; display: none; visibility: hidden; }
