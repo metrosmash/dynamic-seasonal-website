@@ -1,4 +1,4 @@
-/* Eid al-Fitr seasonal demo interactive behaviors */
+/* Eid al-Fitr (Sallah) Redesign Script */
 (function () {
   "use strict";
 

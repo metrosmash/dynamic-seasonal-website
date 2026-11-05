@@ -40,12 +40,20 @@
 
   function render(message, isError) {
     if (status) {
-      status.textContent = message || ("Current version: " + state.season + ".");
       status.classList.toggle("error", Boolean(isError));
+      if (message) {
+        status.textContent = message;
+      } else {
+        status.textContent = "";
+        var number = document.createElement("span");
+        number.className = "edition-no";
+        number.textContent = "Edition " + (state.index + 1) + " of " + state.history.length;
+        status.appendChild(number);
+        status.appendChild(document.createTextNode(" \u00B7 " + state.season));
+      }
     }
     if (historyLine) {
-      historyLine.textContent = "Version " + (state.index + 1) + " of " + state.history.length +
-        ": " + state.history.join("  >  ");
+      historyLine.textContent = state.history.join(" \u2192 ");
     }
     presetButtons.forEach(function (button) {
       button.classList.toggle("active", button.getAttribute("data-season") === state.season);
