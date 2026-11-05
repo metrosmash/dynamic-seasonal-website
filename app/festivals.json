@@ -1,0 +1,42 @@
+[
+  {
+    "id": "christmas",
+    "names": ["christmas", "xmas"],
+    "period": "25 December (some Orthodox churches mark 7 January)",
+    "symbols": ["evergreen tree", "star", "candles", "wreath", "snow"],
+    "palette": ["deep green", "red", "gold", "white"],
+    "avoid": ["denominational claims", "nativity scenes with religious figures"]
+  },
+  {
+    "id": "halloween",
+    "names": ["halloween", "spooky season"],
+    "period": "31 October",
+    "symbols": ["pumpkin", "moon", "bat", "cobweb"],
+    "palette": ["orange", "black", "purple"],
+    "avoid": ["gore", "horror imagery"]
+  },
+  {
+    "id": "workers day",
+    "names": ["workers day", "workers' day", "labour day", "labor day", "may day"],
+    "period": "1 May in most countries (the US marks Labor Day in September)",
+    "symbols": ["gear", "wheat sprig", "raised tools"],
+    "palette": ["navy", "brick red", "linen"],
+    "avoid": ["partisan slogans", "party symbols", "protest imagery"]
+  },
+  {
+    "id": "childrens day",
+    "names": ["childrens day", "children's day", "kids day"],
+    "period": "Dates vary by country; never state a single date as universal",
+    "symbols": ["balloons", "bunting", "toys", "confetti"],
+    "palette": ["teal", "berry", "warm yellow"],
+    "avoid": ["depicting or naming real children", "country-specific claims"]
+  },
+  {
+    "id": "eid",
+    "names": ["eid", "eid al-fitr", "eid al fitr", "sallah", "eid al-fitr (sallah)"],
+    "period": "End of Ramadan; the date moves each year with the lunar calendar, so never state a specific date",
+    "symbols": ["crescent moon", "lantern", "geometric pattern", "stars"],
+    "palette": ["emerald", "gold", "ivory"],
+    "avoid": ["stating dates", "religious rulings or quotes", "pork or alcohol imagery"]
+  }
+]
