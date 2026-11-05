@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
+import urllib.error
 
 import pytest
 
 from app import create_app
 from app import seasonal
+from app import wiki
 from app.llm import ProviderError
 
 
@@ -182,32 +185,37 @@ def _llm_client(tmp_path, monkeypatch, complete):
         "SEASONAL_SITE_DIR": str(site),
         "SEASONAL_ORIGINAL_DIR": str(original),
     })
-    monkeypatch.setattr(seasonal.llm, "complete", complete)
+    monkeypatch.setattr(seasonal.llm, "complete_with_tools", complete)
     return app.test_client()
 
 
 def test_llm_success_uses_returned_files(tmp_path, monkeypatch):
     seen = {}
 
-    def fake_complete(prompt, **kwargs):
-        seen["prompt"] = prompt
+    def fake_complete(messages, **kwargs):
+        seen["messages"] = messages
+        seen["tools"] = kwargs.get("tools", [])
         files = seasonal.design_locally("Christmas")
         files["index.html"] = files["index.html"].replace(
             "Sample Café at Christmas (sample text)", "LLM Marker Heading (sample text)"
         )
-        return json.dumps(files)
+        return {"content": json.dumps(files)}
 
     client = _llm_client(tmp_path, monkeypatch, fake_complete)
     body = client.post("/api/redesign", json={"season": "Christmas"}).get_json()
     assert body["season"] == "Christmas"
     assert not body.get("warning")
     assert "LLM Marker Heading" in client.get("/preview").get_data(as_text=True)
-    assert "Redesign this website for the season: Christmas." in seen["prompt"]
-    assert "Current site source files:" in seen["prompt"]
+    sent = " ".join(str(item.get("content", "")) for item in seen["messages"])
+    assert "Redesign this website for the season: Christmas." in sent
+    assert "Current site source files:" in sent
+    assert any(
+        tool.get("function", {}).get("name") == "festival_info" for tool in seen["tools"]
+    )
 
 
 def test_llm_unreachable_falls_back_to_builtin_with_warning(tmp_path, monkeypatch):
-    def failing_complete(prompt, **kwargs):
+    def failing_complete(messages, **kwargs):
         raise ProviderError("AI provider could not be reached before the timeout.")
 
     client = _llm_client(tmp_path, monkeypatch, failing_complete)
@@ -219,11 +227,151 @@ def test_llm_unreachable_falls_back_to_builtin_with_warning(tmp_path, monkeypatc
 
 
 def test_llm_invalid_output_keeps_previous_version(tmp_path, monkeypatch):
-    client = _llm_client(tmp_path, monkeypatch, lambda prompt, **kwargs: "not json at all")
+    client = _llm_client(
+        tmp_path, monkeypatch, lambda messages, **kwargs: {"content": "not json at all"}
+    )
     before = client.get("/preview").get_data(as_text=True)
     response = client.post("/api/redesign", json={"season": "Christmas"})
     assert response.status_code == 400
     assert "error" in response.get_json()
+    assert client.get("/preview").get_data(as_text=True) == before
+
+
+def test_llm_tool_round_trip_grounds_design_in_verified_facts(tmp_path, monkeypatch):
+    seen = {}
+    files = seasonal.design_locally("Eid al-Fitr (Sallah)")
+    calls = [
+        {"content": "", "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "festival_info", "arguments": json.dumps({"name": "Sallah"})},
+        }]},
+        {"content": json.dumps(files)},
+    ]
+
+    def fake_complete(messages, **kwargs):
+        seen.setdefault("rounds", []).append(list(messages))
+        return calls.pop(0)
+
+    client = _llm_client(tmp_path, monkeypatch, fake_complete)
+    assert client.post("/api/redesign", json={"season": "Sallah"}).status_code == 200
+    assert "Eid al-Fitr" in client.get("/preview").get_data(as_text=True)
+    tool_messages = [
+        item for item in seen["rounds"][1] if item.get("role") == "tool"
+    ]
+    assert tool_messages and "lantern" in tool_messages[0]["content"]
+    assert '"found": true' in tool_messages[0]["content"]
+
+
+def test_unknown_festival_tool_result_forbids_invention():
+    assert seasonal.lookup_festival("Sallah")["id"] == "eid"
+    assert seasonal.lookup_festival("Made Up Day") is None
+    result = json.loads(seasonal.run_festival_tool("Made Up Day"))
+    assert result["found"] is False
+    assert "generic" in result["guidance"]
+
+
+class _FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def _stub_urlopen(monkeypatch, payloads):
+    calls = {"count": 0}
+
+    def fake_urlopen(request, timeout=None):
+        payload = payloads[min(calls["count"], len(payloads) - 1)]
+        calls["count"] += 1
+        if isinstance(payload, Exception):
+            raise payload
+        return _FakeResponse(json.dumps(payload).encode("utf-8"))
+
+    monkeypatch.setattr(wiki.urllib.request, "urlopen", fake_urlopen)
+    return calls
+
+
+def test_wiki_search_returns_summary(monkeypatch):
+    _stub_urlopen(monkeypatch, [
+        ["Diwali", ["Diwali"], [], []],
+        {
+            "type": "standard",
+            "extract": "Diwali is a festival of lights celebrated by Hindus, Jains, Sikhs and some Buddhists.",
+            "content_urls": {"desktop": {"page": "https://en.wikipedia.org/wiki/Diwali"}},
+        },
+    ])
+    found = wiki.search_festival("Diwali")
+    assert found["found"] is True
+    assert found["title"] == "Diwali"
+    assert "festival of lights" in found["summary"]
+
+
+def test_wiki_search_skips_disambiguation_and_short_pages(monkeypatch):
+    _stub_urlopen(monkeypatch, [
+        ["X", ["X (disambiguation)", "X festival"], [], []],
+        {"type": "disambiguation", "extract": "X may refer to many things here and there."},
+        {"type": "standard", "extract": "X festival is a long-running harvest celebration held each autumn season with music."},
+    ])
+    found = wiki.search_festival("X")
+    assert found["found"] is True
+    assert found["title"] == "X festival"
+
+
+def test_wiki_search_never_raises(monkeypatch):
+    _stub_urlopen(monkeypatch, [["Nope", [], [], []]])
+    assert wiki.search_festival("Nope") == {"found": False}
+    _stub_urlopen(monkeypatch, [urllib.error.URLError("down")])
+    assert wiki.search_festival("Diwali") == {"found": False}
+
+
+def test_llm_falls_back_to_search_tool_for_unknown_festival(tmp_path, monkeypatch):
+    monkeypatch.setattr(wiki, "search_festival", lambda name, timeout_s=8: {
+        "found": True,
+        "title": "Diwali",
+        "summary": "Diwali is a festival of lights celebrated each autumn.",
+        "url": "https://en.wikipedia.org/wiki/Diwali",
+    })
+    seen = {}
+    files = seasonal.design_locally("Diwali")
+    calls = [
+        {"content": "", "tool_calls": [{
+            "id": "call_1", "type": "function",
+            "function": {"name": "festival_info", "arguments": json.dumps({"name": "Diwali"})},
+        }]},
+        {"content": "", "tool_calls": [{
+            "id": "call_2", "type": "function",
+            "function": {"name": "search_festival", "arguments": json.dumps({"name": "Diwali"})},
+        }]},
+        {"content": json.dumps(files)},
+    ]
+
+    def fake_complete(messages, **kwargs):
+        seen.setdefault("rounds", []).append(list(messages))
+        return calls.pop(0)
+
+    client = _llm_client(tmp_path, monkeypatch, fake_complete)
+    assert client.post("/api/redesign", json={"season": "Diwali"}).status_code == 200
+    tool_contents = " ".join(
+        item.get("content", "") for item in seen["rounds"][2] if item.get("role") == "tool"
+    )
+    assert '"found": false' in tool_contents  # curated lookup missed
+    assert "festival of lights" in tool_contents  # search grounded it
+
+
+def test_agent_stuck_on_tools_keeps_previous_version(tmp_path, monkeypatch):
+    def looping_complete(messages, **kwargs):
+        return {"content": "", "tool_calls": [{
+            "id": "call_x",
+            "type": "function",
+            "function": {"name": "festival_info", "arguments": json.dumps({"name": "X"})},
+        }]}
+
+    client = _llm_client(tmp_path, monkeypatch, looping_complete)
+    before = client.get("/preview").get_data(as_text=True)
+    response = client.post("/api/redesign", json={"season": "Christmas"})
+    assert response.status_code == 400
     assert client.get("/preview").get_data(as_text=True) == before
 
 

@@ -1,4 +1,4 @@
-/* Eid al-Fitr (Sallah) Redesign Script */
+/* Original Sample Café script (placeholder demo site). */
 (function () {
   "use strict";
 
@@ -8,7 +8,7 @@
   if (form && note) {
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      note.textContent = "Eid Mubarak! Sample only: this demo form does not send messages anywhere.";
+      note.textContent = "Sample only: this demo form does not send messages anywhere.";
       form.reset();
     });
   }

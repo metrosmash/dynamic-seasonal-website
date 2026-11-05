@@ -65,6 +65,12 @@ MODEL_NAME=your-model
 PROVIDER_API_KEY=
 ```
 
+The LLM also gets two lookup tools instead of a context dump: `festival_info` backed
+by the curated facts in `app/festivals.json`, and `search_festival`, which queries the
+public Wikipedia API for occasions the curated file does not know. Anything still
+unknown gets a clearly generic design. With the default `fake`/`none` providers the
+built-in designer acts as the agent and needs no tools.
+
 Returned files are validated (HTML must keep the nav, all four sections, and the contact
 form; CSS and JS must be syntactically valid) before replacing the current version.
 Invalid files keep the previous version and show an error, while an unreachable LLM

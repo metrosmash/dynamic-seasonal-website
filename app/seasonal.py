@@ -22,6 +22,7 @@ from flask import current_app, jsonify, redirect, render_template, request
 from tinycss2.ast import AtRule, Declaration, QualifiedRule
 
 from app import llm
+from app import wiki
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -945,6 +946,128 @@ form button {{
 
 
 # ---------------------------------------------------------------------------
+# Festival lookup tool (grounds the agent without bloating every prompt)
+# ---------------------------------------------------------------------------
+
+FESTIVALS_PATH = Path(__file__).resolve().parent / "festivals.json"
+MAX_TOOL_ROUNDS = 3
+
+FESTIVAL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "festival_info",
+        "description": (
+            "Look up verified facts about a seasonal occasion: its period, traditional "
+            "symbols, palette, and things to avoid. Call it for the named season before "
+            "designing. If it reports no verified facts, design a clearly generic "
+            "seasonal style and invent nothing."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The occasion name, e.g. 'Eid al-Fitr (Sallah)'.",
+                }
+            },
+            "required": ["name"],
+        },
+    },
+}
+
+SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_festival",
+        "description": (
+            "Search an external encyclopedia for an occasion the curated lookup did not "
+            "know. Returns a short factual summary or not-found. Use it only for dates, "
+            "symbols, and sensitivities; keep all site copy clearly placeholder."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The occasion name, e.g. 'Diwali'.",
+                }
+            },
+            "required": ["name"],
+        },
+    },
+}
+
+TOOL_GUIDANCE = (
+    "Ground every seasonal detail (dates, symbols, meanings) in tool results — never "
+    "invent your own. Call festival_info first; if it reports no verified facts, call "
+    "search_festival once; if that also finds nothing usable, design a clearly generic "
+    "seasonal style and invent no dates, traditions, or meanings."
+)
+
+
+def _load_festivals() -> list[dict]:
+    try:
+        entries = json.loads(FESTIVALS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return entries if isinstance(entries, list) else []
+
+
+def lookup_festival(name: str) -> dict | None:
+    """Return the verified-facts entry for an occasion, or None when unknown."""
+    key = _normalize_season(name).replace("'", "")
+    for entry in _load_festivals():
+        candidates = [str(entry.get("id", ""))] + [str(n) for n in entry.get("names", [])]
+        if any(key == _normalize_season(c).replace("'", "") for c in candidates):
+            return entry
+    return None
+
+
+def run_festival_tool(name: str) -> str:
+    entry = lookup_festival(name)
+    if entry is None:
+        return json.dumps({
+            "found": False,
+            "guidance": (
+                f"No verified facts for {name!r}. Design a clearly generic seasonal style "
+                "and invent no dates, traditions, meanings, or claims."
+            ),
+        })
+    return json.dumps({
+        "found": True,
+        "facts": entry,
+        "guidance": (
+            "Ground the design in these facts only. Respect the 'avoid' list and never "
+            "state details the facts do not give."
+        ),
+    })
+
+
+def run_search_tool(name: str) -> str:
+    found = wiki.search_festival(name)
+    if not found.get("found"):
+        return json.dumps({
+            "found": False,
+            "guidance": (
+                f"External search found nothing usable for {name!r}. Design a clearly "
+                "generic seasonal style and invent no dates, traditions, meanings, "
+                "or claims."
+            ),
+        })
+    return json.dumps({
+        "found": True,
+        "title": found.get("title", ""),
+        "summary": found.get("summary", ""),
+        "source": found.get("url", ""),
+        "guidance": (
+            "Treat this as background only: use it for dates, symbols, and "
+            "sensitivities, keep all site copy clearly placeholder, and state nothing "
+            "the summary does not support."
+        ),
+    })
+
+
+# ---------------------------------------------------------------------------
 # LLM agent path (used when an OpenAI-compatible provider is configured)
 # ---------------------------------------------------------------------------
 
@@ -986,8 +1109,7 @@ def _extract_agent_files(text: str) -> dict[str, str]:
     return files  # type: ignore[return-value]
 
 
-def call_llm_agent(season: str, current: dict[str, str], config: dict) -> dict[str, str]:
-    prompt = build_agent_prompt(season, current)
+def _provider_attempts(config: dict) -> list[tuple[str, str, str]]:
     attempts = []
     if config.get("PROVIDER") == "openai_compat":
         attempts.append((
@@ -1001,25 +1123,69 @@ def call_llm_agent(season: str, current: dict[str, str], config: dict) -> dict[s
             config.get("FALLBACK_PROVIDER_API_KEY", ""),
             config.get("FALLBACK_MODEL_NAME", ""),
         ))
-    if not attempts:
-        raise AgentError("No LLM provider is configured for seasonal redesigns.")
+    return attempts
+
+
+def _chat(config: dict, messages: list[dict]) -> dict:
     last_error = "unknown error"
-    for base_url, api_key, model in attempts:
+    for base_url, api_key, model in _provider_attempts(config):
         try:
-            reply = llm.complete(
-                prompt,
+            return llm.complete_with_tools(
+                messages,
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
                 temperature=0.7,
                 max_tokens=12000,
                 timeout_s=int(config.get("MODEL_TIMEOUT_S", 25)),
+                tools=[FESTIVAL_TOOL, SEARCH_TOOL],
             )
         except Exception as exc:  # provider/network failure: try the fallback
             last_error = str(exc)[:300] or type(exc).__name__
-            continue
-        return _extract_agent_files(reply)
     raise AgentError(f"The agent could not be reached ({last_error}).")
+
+
+def _execute_tool_call(call: dict) -> tuple[str, str]:
+    """Run one model-requested tool call; returns (tool_call_id, result_json)."""
+    call_id = str(call.get("id", ""))
+    function = call.get("function", {}) if isinstance(call, dict) else {}
+    name = function.get("name", "") if isinstance(function, dict) else ""
+    raw_args = function.get("arguments", "{}") if isinstance(function, dict) else "{}"
+    try:
+        args = json.loads(raw_args) if isinstance(raw_args, str) else {}
+    except ValueError:
+        args = {}
+    if name not in {"festival_info", "search_festival"} or not isinstance(args, dict):
+        return call_id, json.dumps({"error": f"Unknown tool: {name!r}."})
+    season = args.get("name", "")
+    if not isinstance(season, str) or not season.strip():
+        return call_id, json.dumps({"error": "Pass the occasion name as 'name'."})
+    if name == "search_festival":
+        return call_id, run_search_tool(season.strip())
+    return call_id, run_festival_tool(season.strip())
+
+
+def call_llm_agent(season: str, current: dict[str, str], config: dict) -> dict[str, str]:
+    if not _provider_attempts(config):
+        raise AgentError("No LLM provider is configured for seasonal redesigns.")
+    messages = [
+        {"role": "system", "content": TOOL_GUIDANCE},
+        {"role": "user", "content": build_agent_prompt(season, current)},
+    ]
+    for _ in range(MAX_TOOL_ROUNDS):
+        reply = _chat(config, messages)
+        tool_calls = reply.get("tool_calls") or []
+        if not tool_calls:
+            return _extract_agent_files(reply.get("content") or "")
+        messages.append({
+            "role": "assistant",
+            "content": reply.get("content") or "",
+            "tool_calls": tool_calls,
+        })
+        for call in tool_calls:
+            call_id, result = _execute_tool_call(call)
+            messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
+    raise ValidationError(["The agent kept calling tools without returning the files."])
 
 
 def redesign_with_agent(

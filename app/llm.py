@@ -15,8 +15,8 @@ class ProviderError(Exception):
 MAX_RETRIES = 2
 
 
-def complete(
-    prompt: str,
+def _chat(
+    messages: list[dict],
     *,
     base_url: str,
     api_key: str,
@@ -24,19 +24,24 @@ def complete(
     temperature: float,
     max_tokens: int,
     timeout_s: int,
-) -> str:
-    """Call an OpenAI-compatible chat-completions endpoint and return the text."""
+    tools: list[dict] | None = None,
+) -> dict:
+    """Post a chat-completions request and return the assistant message."""
     if not base_url or not model:
         raise ValueError("OpenAI-compatible provider requires PROVIDER_BASE_URL and MODEL_NAME.")
     endpoint = base_url.rstrip("/")
     if not endpoint.endswith("/chat/completions"):
         endpoint += "/chat/completions"
-    body = json.dumps({
+    payload: dict = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-    }).encode("utf-8")
+    }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+    body = json.dumps(payload).encode("utf-8")
     request_headers = {"Content-Type": "application/json"}
     if api_key:
         request_headers["Authorization"] = "Bearer " + api_key
@@ -77,9 +82,59 @@ def complete(
     else:
         raise ProviderError("AI provider did not return a response.")
     try:
-        content = payload["choices"][0]["message"]["content"]
+        message = payload["choices"][0]["message"]
     except (KeyError, IndexError, TypeError) as exc:
         raise ProviderError("AI provider response did not contain a chat completion.") from exc
+    if not isinstance(message, dict):
+        raise ProviderError("AI provider returned non-text content.")
+    return message
+
+
+def complete(
+    prompt: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    timeout_s: int,
+) -> str:
+    """Call an OpenAI-compatible chat-completions endpoint and return the text."""
+    message = _chat(
+        [{"role": "user", "content": prompt}],
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout_s=timeout_s,
+    )
+    content = message.get("content")
     if not isinstance(content, str):
         raise ProviderError("AI provider returned non-text content.")
     return content
+
+
+def complete_with_tools(
+    messages: list[dict],
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    timeout_s: int,
+    tools: list[dict],
+) -> dict:
+    """Chat call that may return tool calls; returns the assistant message as-is."""
+    return _chat(
+        messages,
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout_s=timeout_s,
+        tools=tools,
+    )
