@@ -1,5 +1,9 @@
 # Seasonal Website (dynamic seasonal redesign demo)
 
+[![Tests](https://github.com/metrosmash/halloween_decor/actions/workflows/tests.yml/badge.svg)](https://github.com/metrosmash/halloween_decor/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.14-blue.svg)
+[![License](https://img.shields.io/github/license/metrosmash/halloween_decor.svg)](LICENCE.md)
+
 A proof-of-concept site that redesigns itself for the season. The demo content is a
 fictional **Sample Café** (Home, Menu, About, Contact) written as clearly placeholder
 text — no real addresses, phone numbers, prices, or claims.
