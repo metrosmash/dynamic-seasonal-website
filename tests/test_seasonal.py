@@ -131,8 +131,44 @@ def test_reset_restores_original(client, seasonal_app):
 
 
 def test_all_preset_designs_and_custom_design_pass_validation():
-    for name in (*seasonal.PRESET_SEASONS, "Cherry Blossom Festival", "Sallah", "Xmas!!!"):
+    for name in (*seasonal.get_presets(), "Cherry Blossom Festival", "Sallah", "Xmas!!!"):
         seasonal.validate_files(seasonal.design_locally(name))
+
+
+def test_get_presets_comes_from_festivals_json_in_order():
+    assert seasonal.get_presets() == [
+        "Christmas",
+        "Halloween",
+        "Workers' Day",
+        "Children's Day",
+        "Eid al-Fitr (Sallah)",
+    ]
+
+
+def test_get_presets_respects_flag_and_skips_blank_labels(tmp_path, monkeypatch):
+    path = tmp_path / "festivals.json"
+    path.write_text(json.dumps([
+        {"id": "a", "display_name": "  Alpha  ", "is_preset": True},
+        {"id": "b", "display_name": "Beta", "is_preset": False},
+        {"id": "c", "display_name": "Gamma"},
+        {"id": "d", "display_name": "Delta", "is_preset": "would"},
+        {"id": "e", "display_name": "Epsilon", "is_preset": "True"},
+        {"id": "f", "display_name": "   ", "is_preset": True},
+        {"id": "g", "is_preset": True},
+        "not a dict",
+    ]), encoding="utf-8")
+    monkeypatch.setattr(seasonal, "FESTIVALS_PATH", path)
+    assert seasonal.get_presets() == ["Alpha", "Epsilon"]
+
+
+def test_missing_festivals_file_yields_no_presets_but_page_renders(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(seasonal, "FESTIVALS_PATH", tmp_path / "absent.json")
+    assert seasonal.get_presets() == []
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Enter your own season" in response.get_data(as_text=True)
 
 
 def test_validation_rejects_broken_or_incomplete_agent_output():

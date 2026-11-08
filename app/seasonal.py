@@ -35,15 +35,6 @@ HISTORY_LIMIT = 5
 MAX_FILE_BYTES = 200 * 1024
 MAX_SEASON_CHARS = 80
 
-PRESET_SEASONS = (
-    "Christmas",
-    "Halloween",
-    "Workers' Day",
-    "halloween",
-    "Children's Day",
-    "Eid al-Fitr (Sallah)",
-)
-
 BANNER_TEXT = (
     "Proof of concept demo: seasonal redesigns are triggered by toggles here. "
     "A production system would use a calendar to apply seasonal changes automatically."
@@ -1013,6 +1004,33 @@ def _load_festivals() -> list[dict]:
     return entries if isinstance(entries, list) else []
 
 
+def get_presets() -> list[str]:
+    """Preset button labels, derived from festivals.json in file order.
+
+    An entry becomes a button only when it has a non-empty display_name and
+    explicitly opts in with a true is_preset flag. Anything else (missing or
+    unrecognized flag, blank label) keeps it out of the buttons. A missing or
+    corrupt file yields no presets instead of breaking the page.
+    """
+    presets: list[str] = []
+    for entry in _load_festivals():
+        if not isinstance(entry, dict):
+            continue
+        if not _is_preset_flag(entry.get("is_preset", False)):
+            continue
+        name = entry.get("display_name", "")
+        if isinstance(name, str) and name.strip():
+            presets.append(name.strip())
+    return presets
+
+
+def _is_preset_flag(value: object) -> bool:
+    """Fail closed: only explicit true values opt an entry in as a preset."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    return value is True
+
+
 def lookup_festival(name: str) -> dict | None:
     """Return the verified-facts entry for an occasion, or None when unknown."""
     key = _normalize_season(name).replace("'", "")
@@ -1266,7 +1284,7 @@ def register_seasonal(app) -> None:
         return render_template(
             "seasonal.html",
             banner=BANNER_TEXT,
-            presets=PRESET_SEASONS,
+            presets=get_presets(),
             state=summarize(app.config),
         )
 

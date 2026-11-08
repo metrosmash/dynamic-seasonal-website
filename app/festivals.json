@@ -1,42 +1,52 @@
 [
   {
     "id": "christmas",
+    "display_name": "Christmas",
     "names": ["christmas", "xmas"],
     "period": "25 December (some Orthodox churches mark 7 January)",
     "symbols": ["evergreen tree", "star", "candles", "wreath", "snow"],
     "palette": ["deep green", "red", "gold", "white"],
-    "avoid": ["denominational claims", "nativity scenes with religious figures"]
+    "avoid": ["denominational claims", "nativity scenes with religious figures"],
+    "is_preset": true
   },
   {
     "id": "halloween",
+    "display_name": "Halloween",
     "names": ["halloween", "spooky season"],
     "period": "31 October",
     "symbols": ["pumpkin", "moon", "bat", "cobweb"],
     "palette": ["orange", "black", "purple"],
-    "avoid": ["gore", "horror imagery"]
+    "avoid": ["gore", "horror imagery"],
+    "is_preset": true
   },
   {
     "id": "workers day",
+    "display_name": "Workers' Day",
     "names": ["workers day", "workers' day", "labour day", "labor day", "may day"],
     "period": "1 May in most countries (the US marks Labor Day in September)",
     "symbols": ["gear", "wheat sprig", "raised tools"],
     "palette": ["navy", "brick red", "linen"],
-    "avoid": ["partisan slogans", "party symbols", "protest imagery"]
+    "avoid": ["partisan slogans", "party symbols", "protest imagery"],
+    "is_preset": true
   },
   {
     "id": "childrens day",
+    "display_name": "Children's Day",
     "names": ["childrens day", "children's day", "kids day"],
     "period": "Dates vary by country; never state a single date as universal",
     "symbols": ["balloons", "bunting", "toys", "confetti"],
     "palette": ["teal", "berry", "warm yellow"],
-    "avoid": ["depicting or naming real children", "country-specific claims"]
+    "avoid": ["depicting or naming real children", "country-specific claims"],
+    "is_preset": true
   },
   {
     "id": "eid",
+    "display_name": "Eid al-Fitr (Sallah)",
     "names": ["eid", "eid al-fitr", "eid al fitr", "sallah", "eid al-fitr (sallah)"],
     "period": "End of Ramadan; the date moves each year with the lunar calendar, so never state a specific date",
     "symbols": ["crescent moon", "lantern", "geometric pattern", "stars"],
     "palette": ["emerald", "gold", "ivory"],
-    "avoid": ["stating dates", "religious rulings or quotes", "pork or alcohol imagery"]
+    "avoid": ["stating dates", "religious rulings or quotes", "pork or alcohol imagery"],
+    "is_preset": true
   }
 ]
